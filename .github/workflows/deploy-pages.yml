@@ -2,7 +2,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, staging ]
 
 permissions:
   contents: read
@@ -17,34 +17,33 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Use Node 20
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
 
-      - name: Install
-        run: npm ci
+      - run: npm ci
 
-      - name: Build
-        run: npm run build
+      # Build with different base depending on branch
+      - name: Build (prod)
+        if: github.ref == 'refs/heads/main'
+        run: npx vite build --base=/food-app/ --outDir=build
 
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Build (staging)
+        if: github.ref == 'refs/heads/staging'
+        run: npx vite build --base=/food-app/staging/ --outDir=build
+
+      # Upload artifact
+      - uses: actions/upload-pages-artifact@v3
         with:
           path: build
 
   deploy:
     runs-on: ubuntu-latest
     needs: build
-    permissions:
-      pages: write
-      id-token: write
     environment:
       name: github-pages
     steps:
-      - name: Deploy
-        uses: actions/deploy-pages@v4
+      - uses: actions/deploy-pages@v4
