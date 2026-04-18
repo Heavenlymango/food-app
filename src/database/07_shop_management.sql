@@ -1,0 +1,3 @@
+-- DEPRECATED: All definitions from this file have been consolidated into 01_schema.sql.
+-- This file is kept as a placeholder so existing references don't break.
+-- Do not run this file; it is intentionally empty.
