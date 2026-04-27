@@ -5,7 +5,6 @@ import { Clock, CheckCircle2, ShoppingBag, Store, AlertTriangle, XCircle, Leaf }
 import { format, formatDistance } from 'date-fns';
 import { CancelOrderDialog } from './CancelOrderDialog';
 import { OrderChatDialog } from './OrderChatDialog';
-import { SHOPS } from '../data/menuData';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 
 interface OrderTrackerProps {
@@ -294,17 +293,10 @@ export function OrderTracker({ orders, studentId }: OrderTrackerProps) {
               <div className="border-t border-gray-200 pt-3">
                 <p className="text-xs text-gray-500 uppercase tracking-wide mb-3">Order Details</p>
                 {Object.entries(itemsByShop).map(([shopId, items]) => {
-                  const shop = SHOPS.find(s => s.id === shopId);
-                  if (!shop) return null;
-
                   return (
                     <div key={shopId} className="mb-4 last:mb-0">
-                      {/* Shop Header with Campus Badge */}
                       <div className="flex items-center gap-2 mb-2">
-                        <h4 className="text-sm font-medium text-gray-900">{shop.name}</h4>
-                        <Badge variant="outline" className="text-xs px-1.5 py-0">
-                          {shop.campus === 'RUPP' ? '🎓 RUPP' : '📚 IFL'}
-                        </Badge>
+                        <h4 className="text-sm font-medium text-gray-900">Shop {shopId}</h4>
                       </div>
                       {/* Shop Items - Visual Cards */}
                       <div className="space-y-2">

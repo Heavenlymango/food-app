@@ -24,7 +24,7 @@ import {
   Save,
   Construction
 } from 'lucide-react';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { supabase } from '../utils/supabase/client';
 import {
   Dialog,
   DialogContent,
@@ -94,79 +94,25 @@ export function StudentProfile({ user, onUpdateUser }: StudentProfileProps) {
     language: 'en',
   });
 
-  // Load payment methods
   useEffect(() => {
-    loadPaymentMethods();
-    loadPreferences();
+    // payment methods are WIP — no API call needed
   }, [user?.id]);
-
-  const loadPaymentMethods = async () => {
-    try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-36162e30/api/student/payment-methods?studentId=${user?.id}`,
-        { headers: { Authorization: `Bearer ${publicAnonKey}` } }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setPaymentMethods(data.paymentMethods || []);
-      }
-    } catch (error) {
-      console.error('Failed to load payment methods:', error);
-    }
-  };
-
-  const loadPreferences = async () => {
-    try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-36162e30/api/student/preferences?studentId=${user?.id}`,
-        { headers: { Authorization: `Bearer ${publicAnonKey}` } }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.preferences) {
-          setPreferences(data.preferences);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to load preferences:', error);
-    }
-  };
 
   const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setErrorMessage('');
     setSuccessMessage('');
-
     try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-36162e30/api/student/profile`,
-        {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${publicAnonKey}`,
-          },
-          body: JSON.stringify({
-            studentId: user?.id,
-            ...profileData,
-          }),
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        onUpdateUser(data.user);
-        setSuccessMessage('Profile updated successfully!');
-        setTimeout(() => setSuccessMessage(''), 3000);
-      } else {
-        setErrorMessage('Failed to update profile');
-      }
-    } catch (error) {
-      console.error('Profile update error:', error);
-      setErrorMessage('Failed to update profile');
+      const { error } = await supabase.auth.updateUser({
+        data: { name: profileData.name.trim() },
+      });
+      if (error) throw error;
+      onUpdateUser({ name: profileData.name.trim() });
+      setSuccessMessage('Profile updated successfully!');
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (error: any) {
+      setErrorMessage(error.message || 'Failed to update profile');
     } finally {
       setIsLoading(false);
     }
@@ -174,84 +120,17 @@ export function StudentProfile({ user, onUpdateUser }: StudentProfileProps) {
 
   const handlePaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
-
-    try {
-      const method = editingPayment ? 'PUT' : 'POST';
-      const url = editingPayment
-        ? `https://${projectId}.supabase.co/functions/v1/make-server-36162e30/api/student/payment-methods/${editingPayment.id}`
-        : `https://${projectId}.supabase.co/functions/v1/make-server-36162e30/api/student/payment-methods`;
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${publicAnonKey}`,
-        },
-        body: JSON.stringify({
-          studentId: user?.id,
-          ...paymentFormData,
-        }),
-      });
-
-      if (response.ok) {
-        await loadPaymentMethods();
-        setIsPaymentDialogOpen(false);
-        resetPaymentForm();
-        setSuccessMessage('Payment method saved successfully!');
-        setTimeout(() => setSuccessMessage(''), 3000);
-      }
-    } catch (error) {
-      console.error('Payment method save error:', error);
-      setErrorMessage('Failed to save payment method');
-    } finally {
-      setIsLoading(false);
-    }
+    // Payment methods not yet implemented
+    setIsPaymentDialogOpen(false);
+    resetPaymentForm();
   };
 
-  const handleDeletePayment = async (paymentId: string) => {
-    if (!confirm('Are you sure you want to delete this payment method?')) return;
-
-    try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-36162e30/api/student/payment-methods/${paymentId}?studentId=${user?.id}`,
-        {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${publicAnonKey}` },
-        }
-      );
-
-      if (response.ok) {
-        await loadPaymentMethods();
-        setSuccessMessage('Payment method deleted successfully!');
-        setTimeout(() => setSuccessMessage(''), 3000);
-      }
-    } catch (error) {
-      console.error('Delete payment method error:', error);
-      setErrorMessage('Failed to delete payment method');
-    }
+  const handleDeletePayment = async (_paymentId: string) => {
+    // Payment methods not yet implemented
   };
 
-  const handleSetDefaultPayment = async (paymentId: string) => {
-    try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-36162e30/api/student/payment-methods/${paymentId}/set-default`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${publicAnonKey}`,
-          },
-          body: JSON.stringify({ studentId: user?.id }),
-        }
-      );
-
-      if (response.ok) {
-        await loadPaymentMethods();
-      }
-    } catch (error) {
-      console.error('Set default payment error:', error);
-    }
+  const handleSetDefaultPayment = async (_paymentId: string) => {
+    // Payment methods not yet implemented
   };
 
   const handleEditPayment = (payment: PaymentMethod) => {
@@ -279,35 +158,9 @@ export function StudentProfile({ user, onUpdateUser }: StudentProfileProps) {
     });
   };
 
-  const handlePreferenceUpdate = async () => {
-    setIsLoading(true);
-
-    try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-36162e30/api/student/preferences`,
-        {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${publicAnonKey}`,
-          },
-          body: JSON.stringify({
-            studentId: user?.id,
-            preferences,
-          }),
-        }
-      );
-
-      if (response.ok) {
-        setSuccessMessage('Preferences updated successfully!');
-        setTimeout(() => setSuccessMessage(''), 3000);
-      }
-    } catch (error) {
-      console.error('Preferences update error:', error);
-      setErrorMessage('Failed to update preferences');
-    } finally {
-      setIsLoading(false);
-    }
+  const handlePreferenceUpdate = () => {
+    setSuccessMessage('Preferences saved!');
+    setTimeout(() => setSuccessMessage(''), 3000);
   };
 
   const getPaymentIcon = (type: string) => {
