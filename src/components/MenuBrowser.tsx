@@ -37,7 +37,11 @@ export function MenuBrowser({ onAddToCart }: MenuBrowserProps) {
   async function loadMenu() {
     setLoading(true);
     try {
-      const [itemsRes, shopsRes] = await Promise.all([
+      const now = new Date();
+      const dow = now.getDay(); // 0=Sun
+      const timeStr = now.toTimeString().slice(0, 5); // "HH:MM"
+
+      const [itemsRes, shopsRes, schedulesRes] = await Promise.all([
         supabase
           .from('menu_items')
           .select('id, name, description, price, category, calories, is_healthy, is_special, image_url, preparation_time, shops!inner(shop_code, name, campus, description, discount_percent)')
@@ -46,12 +50,27 @@ export function MenuBrowser({ onAddToCart }: MenuBrowserProps) {
           .from('shops')
           .select('shop_code, name, description, campus, discount_percent')
           .eq('is_active', true),
+        supabase
+          .from('item_discount_schedules')
+          .select('menu_item_id, discount_percent')
+          .eq('is_active', true)
+          .contains('days_of_week', [dow])
+          .lte('start_time', timeStr)
+          .gte('end_time', timeStr),
       ]);
 
       const rawItems = itemsRes.data ?? [];
       const rawShops = shopsRes.data ?? [];
+      const rawSchedules = schedulesRes.data ?? [];
 
-      // Build shop-level discount map (discount controlled per shop, not per item)
+      // Best active schedule discount per item
+      const scheduleMap: Record<string, number> = {};
+      for (const s of rawSchedules) {
+        const cur = scheduleMap[s.menu_item_id] ?? 0;
+        if (s.discount_percent > cur) scheduleMap[s.menu_item_id] = s.discount_percent;
+      }
+
+      // Shop-level discount map
       const shopDiscountMap: Record<string, number> = {};
       for (const s of rawShops) {
         shopDiscountMap[s.shop_code] = (s.discount_percent as number) ?? 0;
@@ -59,7 +78,9 @@ export function MenuBrowser({ onAddToCart }: MenuBrowserProps) {
 
       const mappedItems: MenuItem[] = rawItems.map((item: any) => {
         const shopCode = (item.shops as any)?.shop_code ?? '';
-        const effectivePct = shopDiscountMap[shopCode] ?? 0;
+        const shopPct = shopDiscountMap[shopCode] ?? 0;
+        const itemPct = scheduleMap[item.id] ?? 0;
+        const effectivePct = Math.max(shopPct, itemPct);
         const price = item.price as number;
         return {
           id: item.id,

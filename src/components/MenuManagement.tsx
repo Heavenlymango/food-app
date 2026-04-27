@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Leaf } from 'lucide-react';
+import { Plus, Edit, Trash2, Leaf, Clock, Tag } from 'lucide-react';
 import { Button } from './ui/button';
+import { Badge } from './ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -30,8 +31,27 @@ interface RawItem {
   image_url: string | null;
   preparation_time: number | null;
   is_available: boolean | null;
-  discount_percent: number | null;
 }
+
+interface DiscountSchedule {
+  id: string;
+  label: string;
+  discount_percent: number;
+  days_of_week: number[];
+  start_time: string;
+  end_time: string;
+  is_active: boolean;
+}
+
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+const EMPTY_SCHEDULE = {
+  label: 'Lunch Special',
+  discount_percent: '20',
+  days: [1, 2, 3, 4, 5] as number[],
+  start_time: '11:00',
+  end_time: '13:00',
+};
 
 const EMPTY_FORM = {
   name: '', description: '', price: '', category: 'Main Course',
@@ -47,6 +67,12 @@ export function MenuManagement({ shopId }: MenuManagementProps) {
   const [editingItem, setEditingItem] = useState<RawItem | null>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+
+  // per-item discount schedules
+  const [schedules, setSchedules] = useState<DiscountSchedule[]>([]);
+  const [scheduleForm, setScheduleForm] = useState(EMPTY_SCHEDULE);
+  const [showScheduleForm, setShowScheduleForm] = useState(false);
+  const [savingSchedule, setSavingSchedule] = useState(false);
 
   useEffect(() => { resolveShop(); }, [shopId]);
 
@@ -81,10 +107,12 @@ export function MenuManagement({ shopId }: MenuManagementProps) {
   function openAdd() {
     setEditingItem(null);
     setForm(EMPTY_FORM);
+    setSchedules([]);
+    setShowScheduleForm(false);
     setIsDialogOpen(true);
   }
 
-  function openEdit(item: RawItem) {
+  async function openEdit(item: RawItem) {
     setEditingItem(item);
     setForm({
       name: item.name,
@@ -98,7 +126,62 @@ export function MenuManagement({ shopId }: MenuManagementProps) {
       is_available: item.is_available ?? true,
       image_url: item.image_url ?? '',
     });
+    setShowScheduleForm(false);
     setIsDialogOpen(true);
+    await fetchSchedules(item.id);
+  }
+
+  async function fetchSchedules(itemId: string) {
+    const { data } = await supabase
+      .from('item_discount_schedules')
+      .select('*')
+      .eq('menu_item_id', itemId)
+      .order('created_at', { ascending: false });
+    setSchedules((data ?? []) as DiscountSchedule[]);
+  }
+
+  async function handleAddSchedule() {
+    if (!editingItem) return;
+    const pct = parseFloat(scheduleForm.discount_percent);
+    if (!pct || pct < 1 || pct > 100) { toast.error('Discount must be 1–100'); return; }
+    if (scheduleForm.days.length === 0) { toast.error('Select at least one day'); return; }
+    if (scheduleForm.start_time >= scheduleForm.end_time) { toast.error('End time must be after start time'); return; }
+    setSavingSchedule(true);
+    try {
+      const { error } = await supabase.from('item_discount_schedules').insert({
+        menu_item_id: editingItem.id,
+        label: scheduleForm.label.trim() || 'Deal',
+        discount_percent: pct,
+        days_of_week: scheduleForm.days,
+        start_time: scheduleForm.start_time,
+        end_time: scheduleForm.end_time,
+        is_active: true,
+      });
+      if (error) throw error;
+      toast.success('Schedule added!');
+      setShowScheduleForm(false);
+      setScheduleForm(EMPTY_SCHEDULE);
+      await fetchSchedules(editingItem.id);
+    } catch (e: any) {
+      toast.error('Error: ' + e.message);
+    } finally {
+      setSavingSchedule(false);
+    }
+  }
+
+  async function handleDeleteSchedule(id: string) {
+    const { error } = await supabase.from('item_discount_schedules').delete().eq('id', id);
+    if (error) { toast.error('Failed to delete'); return; }
+    setSchedules(prev => prev.filter(s => s.id !== id));
+  }
+
+  async function handleToggleSchedule(id: string, current: boolean) {
+    const { error } = await supabase
+      .from('item_discount_schedules')
+      .update({ is_active: !current })
+      .eq('id', id);
+    if (error) { toast.error('Failed to update'); return; }
+    setSchedules(prev => prev.map(s => s.id === id ? { ...s, is_active: !current } : s));
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -195,7 +278,7 @@ export function MenuManagement({ shopId }: MenuManagementProps) {
                   </Select>
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label>Calories</Label>
                   <Input type="number" min="0" value={f.calories} onChange={e => set('calories', e.target.value)} />
@@ -203,10 +286,6 @@ export function MenuManagement({ shopId }: MenuManagementProps) {
                 <div className="space-y-2">
                   <Label>Prep (min)</Label>
                   <Input type="number" min="1" value={f.preparation_time} onChange={e => set('preparation_time', e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Discount %</Label>
-                  <Input type="number" min="0" max="100" value={f.discount_percent} onChange={e => set('discount_percent', e.target.value)} />
                 </div>
               </div>
               <div className="space-y-2">
@@ -230,6 +309,101 @@ export function MenuManagement({ shopId }: MenuManagementProps) {
                 </Button>
               </DialogFooter>
             </form>
+
+            {/* Discount schedules — only when editing an existing item */}
+            {editingItem && (
+              <div className="mt-4 border-t pt-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 font-semibold text-sm">
+                    <Tag className="w-4 h-4 text-orange-500" /> Discount Schedules
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => setShowScheduleForm(v => !v)}>
+                    <Plus className="w-3 h-3 mr-1" /> Add
+                  </Button>
+                </div>
+
+                {showScheduleForm && (
+                  <div className="border rounded-lg p-3 space-y-3 bg-orange-50">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Label</Label>
+                      <Input value={scheduleForm.label} onChange={e => setScheduleForm(p => ({ ...p, label: e.target.value }))} placeholder="e.g. Lunch Special" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Discount %</Label>
+                      <Input type="number" min="1" max="100" value={scheduleForm.discount_percent}
+                        onChange={e => setScheduleForm(p => ({ ...p, discount_percent: e.target.value }))} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Days</Label>
+                      <div className="flex gap-1 flex-wrap">
+                        {DAY_NAMES.map((d, i) => (
+                          <button key={i} type="button"
+                            onClick={() => setScheduleForm(p => ({
+                              ...p,
+                              days: p.days.includes(i) ? p.days.filter(x => x !== i) : [...p.days, i],
+                            }))}
+                            className={`px-2 py-1 text-xs rounded border transition-colors ${
+                              scheduleForm.days.includes(i)
+                                ? 'bg-orange-500 text-white border-orange-500'
+                                : 'bg-white text-gray-700 border-gray-300'
+                            }`}>
+                            {d}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-xs">From</Label>
+                        <Input type="time" value={scheduleForm.start_time}
+                          onChange={e => setScheduleForm(p => ({ ...p, start_time: e.target.value }))} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">To</Label>
+                        <Input type="time" value={scheduleForm.end_time}
+                          onChange={e => setScheduleForm(p => ({ ...p, end_time: e.target.value }))} />
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" onClick={() => setShowScheduleForm(false)} className="flex-1">Cancel</Button>
+                      <Button size="sm" disabled={savingSchedule} onClick={handleAddSchedule}
+                        className="flex-1 bg-orange-600 hover:bg-orange-700">
+                        {savingSchedule ? 'Saving…' : 'Save Schedule'}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {schedules.length === 0 && !showScheduleForm && (
+                  <p className="text-xs text-gray-400">No schedules yet.</p>
+                )}
+
+                {schedules.map(s => {
+                  const days = s.days_of_week.sort((a, b) => a - b).map(d => DAY_NAMES[d]).join(', ');
+                  const fmt = (t: string) => {
+                    const [h, m] = t.split(':').map(Number);
+                    return `${h === 0 ? 12 : h > 12 ? h - 12 : h}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
+                  };
+                  return (
+                    <div key={s.id} className={`flex items-center gap-2 p-2 rounded-lg border text-sm ${s.is_active ? 'bg-orange-50 border-orange-200' : 'bg-gray-50 border-gray-200'}`}>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <Badge className="bg-orange-500 text-xs">-{s.discount_percent}%</Badge>
+                          <span className="font-medium text-xs">{s.label}</span>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          <Clock className="w-3 h-3 inline mr-1" />{days} · {fmt(s.start_time)} – {fmt(s.end_time)}
+                        </p>
+                      </div>
+                      <Switch checked={s.is_active} onCheckedChange={() => handleToggleSchedule(s.id, s.is_active)} />
+                      <Button variant="ghost" size="sm" onClick={() => handleDeleteSchedule(s.id)}>
+                        <Trash2 className="w-3 h-3 text-red-500" />
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </DialogContent>
         </Dialog>
       </div>
