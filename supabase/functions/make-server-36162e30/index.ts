@@ -1,7 +1,7 @@
 import { Hono } from "npm:hono";
 import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
-import * as kv from "./kv_store.ts";
+import * as kv from "./kv_store.tsx";
 import * as crypto from "node:crypto";
 import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
 const app = new Hono();
@@ -800,7 +800,7 @@ app.post("/make-server-36162e30/api/orders/place", async (c) => {
     const { data: { user: supaUser }, error: authErr } = await supabase.auth.getUser(jwt);
     if (authErr || !supaUser) return c.json({ error: 'Unauthorized' }, 401);
 
-    const { shopId: shopCode, items, total, estimatedMinutes } = await c.req.json();
+    const { shopId: shopCode, items, total, estimatedMinutes, scheduledFor } = await c.req.json();
 
     // Look up shop UUID from shop_code
     const { data: shop, error: shopErr } = await supabase
@@ -822,6 +822,7 @@ app.post("/make-server-36162e30/api/orders/place", async (c) => {
         estimated_ready_time: estimatedMinutes
           ? new Date(Date.now() + estimatedMinutes * 60000).toISOString()
           : null,
+        scheduled_for: scheduledFor ?? null,
       })
       .select()
       .single();
@@ -850,6 +851,7 @@ app.post("/make-server-36162e30/api/orders/place", async (c) => {
         status: 'pending',
         createdAt: order.ordered_at,
         estimatedMinutes: estimatedMinutes ?? 15,
+        scheduledFor: scheduledFor ?? null,
       }
     });
   } catch (error) {
@@ -1755,25 +1757,234 @@ app.post("/make-server-36162e30/admin/shops/:shopId/toggle-status", async (c) =>
   try {
     const shopId = c.req.param('shopId');
     const { isActive } = await c.req.json();
-    
+
     const shop = await kv.get(`shop:${shopId}`);
-    
+
     if (!shop) {
       return c.json({ error: 'Shop not found' }, 404);
     }
-    
+
     const updatedShop = {
       ...shop,
       isActive,
       updatedAt: new Date().toISOString(),
     };
-    
+
     await kv.set(`shop:${shopId}`, updatedShop);
-    
+
     return c.json({ shop: updatedShop });
   } catch (error) {
     console.error('Toggle shop status error:', error);
     return c.json({ error: 'Failed to toggle shop status' }, 500);
+  }
+});
+
+// Get / Save System Settings
+app.get("/make-server-36162e30/admin/settings", async (c) => {
+  try {
+    const settings = await kv.get('system-settings') ?? {
+      registrationsEnabled: true,
+      maintenanceMode: false,
+      emailNotifications: false,
+      commission: 0,
+      supportEmail: '',
+    };
+    return c.json(settings);
+  } catch (error) {
+    console.error('Get settings error:', error);
+    return c.json({ error: 'Failed to load settings' }, 500);
+  }
+});
+
+app.post("/make-server-36162e30/admin/settings", async (c) => {
+  try {
+    const body = await c.req.json();
+    const existing = await kv.get('system-settings') ?? {};
+    const updated = { ...existing, ...body, updatedAt: new Date().toISOString() };
+    await kv.set('system-settings', updated);
+    return c.json({ ok: true, settings: updated });
+  } catch (error) {
+    console.error('Save settings error:', error);
+    return c.json({ error: 'Failed to save settings' }, 500);
+  }
+});
+
+// Broadcast Announcement — creates a notification for every active user in Supabase
+app.post("/make-server-36162e30/admin/broadcast", async (c) => {
+  try {
+    const { message, title } = await c.req.json();
+    if (!message || !title) return c.json({ error: 'title and message required' }, 400);
+
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    );
+
+    // Fetch all user IDs from Supabase auth
+    const { data: authUsers, error: authErr } = await supabase.auth.admin.listUsers();
+    if (authErr) throw authErr;
+
+    const notifications = authUsers.users.map((u: any) => ({
+      user_id: u.id,
+      type: 'system',
+      title,
+      message,
+      priority: 'high',
+    }));
+
+    if (notifications.length > 0) {
+      await supabase.from('notifications').insert(notifications);
+    }
+
+    return c.json({ ok: true, sent: notifications.length });
+  } catch (error) {
+    console.error('Broadcast error:', error);
+    return c.json({ error: 'Failed to broadcast' }, 500);
+  }
+});
+
+// Create Seller Account (admin only)
+app.post("/make-server-36162e30/admin/users/create", async (c) => {
+  try {
+    const { email, password, name, role, shopCode } = await c.req.json();
+    if (!email || !password || !name || !role) {
+      return c.json({ error: 'email, password, name, role required' }, 400);
+    }
+
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    );
+
+    const metadata: any = { name, role };
+    if (role === 'seller' && shopCode) metadata.shop_id = shopCode;
+
+    const { data, error } = await supabase.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: metadata,
+    });
+
+    if (error) throw error;
+
+    // Mirror to KV for the admin dashboard listing
+    await kv.set(`user:${data.user.id}`, {
+      id: data.user.id,
+      email,
+      name,
+      role,
+      shopId: shopCode ?? null,
+      isActive: true,
+      createdAt: new Date().toISOString(),
+    });
+
+    return c.json({ ok: true, user: data.user });
+  } catch (error: any) {
+    console.error('Create user error:', error);
+    return c.json({ error: error.message ?? 'Failed to create user' }, 500);
+  }
+});
+
+// Create Shop (admin only)
+app.post("/make-server-36162e30/admin/shops/create", async (c) => {
+  try {
+    const { name, campus, shopCode, category, description } = await c.req.json();
+    if (!name || !campus || !shopCode) {
+      return c.json({ error: 'name, campus, shopCode required' }, 400);
+    }
+
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    );
+
+    const { data, error } = await supabase.from('shops').insert({
+      shop_code: shopCode,
+      name,
+      campus,
+      category: category ?? null,
+      description: description ?? null,
+      is_active: true,
+      is_open: true,
+    }).select().single();
+
+    if (error) throw error;
+
+    // Mirror to KV
+    await kv.set(`shop:${shopCode}`, {
+      id: shopCode,
+      name,
+      campus,
+      category,
+      description,
+      isActive: true,
+      totalOrders: 0,
+      createdAt: new Date().toISOString(),
+    });
+
+    return c.json({ ok: true, shop: data });
+  } catch (error: any) {
+    console.error('Create shop error:', error);
+    return c.json({ error: error.message ?? 'Failed to create shop' }, 500);
+  }
+});
+
+// Delete User (admin only)
+app.delete("/make-server-36162e30/admin/users/:userId", async (c) => {
+  try {
+    const userId = c.req.param('userId');
+
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    );
+
+    const { error } = await supabase.auth.admin.deleteUser(userId);
+    if (error) throw error;
+
+    await kv.delete(`user:${userId}`);
+
+    return c.json({ ok: true });
+  } catch (error: any) {
+    console.error('Delete user error:', error);
+    return c.json({ error: error.message ?? 'Failed to delete user' }, 500);
+  }
+});
+
+// Admin Stats (from Supabase DB — more accurate than KV counts)
+app.get("/make-server-36162e30/admin/stats/db", async (c) => {
+  try {
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    );
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const [usersRes, shopsRes, ordersRes, revenueRes, activeRes, todayRes] = await Promise.all([
+      supabase.auth.admin.listUsers(),
+      supabase.from('shops').select('id', { count: 'exact', head: true }).eq('is_active', true),
+      supabase.from('orders').select('id', { count: 'exact', head: true }),
+      supabase.from('orders').select('total_amount').neq('status', 'cancelled'),
+      supabase.from('orders').select('id', { count: 'exact', head: true }).in('status', ['pending', 'preparing', 'ready']),
+      supabase.from('orders').select('id', { count: 'exact', head: true }).gte('ordered_at', today.toISOString()),
+    ]);
+
+    const totalRevenue = (revenueRes.data ?? []).reduce((s: number, o: any) => s + (o.total_amount ?? 0), 0);
+
+    return c.json({
+      totalUsers: usersRes.data?.users?.length ?? 0,
+      totalShops: shopsRes.count ?? 0,
+      totalOrders: ordersRes.count ?? 0,
+      totalRevenue,
+      activeOrders: activeRes.count ?? 0,
+      todayOrders: todayRes.count ?? 0,
+    });
+  } catch (error) {
+    console.error('DB stats error:', error);
+    return c.json({ error: 'Failed to load stats' }, 500);
   }
 });
 

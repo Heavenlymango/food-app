@@ -48,8 +48,7 @@ jobs:
 
       - name: Sync function source to deploy folder
         run: |
-          cp src/supabase/functions/server/index.tsx   supabase/functions/make-server-36162e30/index.ts
-          cp src/supabase/functions/server/kv_store.tsx supabase/functions/make-server-36162e30/kv_store.tsx
+          cp src/supabase/functions/server/index.tsx supabase/functions/make-server-36162e30/index.ts
 
       - name: Deploy edge function
         run: |
