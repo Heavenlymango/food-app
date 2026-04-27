@@ -20,6 +20,7 @@ export function ShopSettings({ shopId }: ShopSettingsProps) {
   const [shop, setShop] = useState<any>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [discountPercent, setDiscountPercent] = useState('0');
 
   useEffect(() => { fetchShop(); }, [shopId]);
 
@@ -31,6 +32,7 @@ export function ShopSettings({ shopId }: ShopSettingsProps) {
       setShop(data);
       setName(data.name ?? '');
       setDescription(data.description ?? '');
+      setDiscountPercent((data.discount_percent ?? 0).toString());
     } catch (e: any) {
       toast.error('Failed to load shop: ' + e.message);
     } finally {
@@ -54,9 +56,10 @@ export function ShopSettings({ shopId }: ShopSettingsProps) {
       const { error } = await supabase.from('shops').update({
         name: name.trim(),
         description: description.trim(),
+        discount_percent: parseFloat(discountPercent) || 0,
       }).eq('shop_code', shopId);
       if (error) throw error;
-      setShop((p: any) => ({ ...p, name: name.trim(), description: description.trim() }));
+      setShop((p: any) => ({ ...p, name: name.trim(), description: description.trim(), discount_percent: parseFloat(discountPercent) || 0 }));
       toast.success('Saved!');
     } catch (e: any) {
       toast.error('Error: ' + e.message);
@@ -104,6 +107,16 @@ export function ShopSettings({ shopId }: ShopSettingsProps) {
             <div className="space-y-2">
               <Label>Description</Label>
               <Textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} />
+            </div>
+            <div className="space-y-2">
+              <Label>Shop-wide Discount %</Label>
+              <Input
+                type="number" min="0" max="100" step="1"
+                value={discountPercent}
+                onChange={e => setDiscountPercent(e.target.value)}
+                placeholder="0 = no discount"
+              />
+              <p className="text-xs text-gray-400">Applies to all items in your shop. Set 0 to disable.</p>
             </div>
             <p className="text-xs text-gray-400">Shop ID: {shopId} · Campus: {shop.campus}</p>
             <Button type="submit" disabled={saving} className="w-full bg-orange-600 hover:bg-orange-700">

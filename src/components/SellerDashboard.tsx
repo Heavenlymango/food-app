@@ -3,28 +3,22 @@ import { Card, CardContent, CardHeader, CardFooter } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { 
-  Clock, 
-  CheckCircle2, 
-  ShoppingBag, 
-  TrendingUp, 
+import {
+  Clock,
+  CheckCircle2,
+  ShoppingBag,
   DollarSign,
-  Users,
   AlertTriangle,
   XCircle,
-  ChevronDown,
-  ChevronUp,
   Leaf,
   Bell,
   LogOut,
   UtensilsCrossed,
-  Tag,
   Settings as SettingsIcon
 } from 'lucide-react';
 import { CancelOrderDialog } from './CancelOrderDialog';
 import { OrderChatDialog } from './OrderChatDialog';
 import { MenuManagement } from './MenuManagement';
-import { PromotionManagement } from './PromotionManagement';
 import { ShopSettings } from './ShopSettings';
 import { MessageNotificationMonitor } from './MessageNotificationMonitor';
 import { ImageWithFallback } from './figma/ImageWithFallback';
@@ -71,7 +65,6 @@ interface SellerDashboardProps {
 
 export function SellerDashboard({ user, onLogout }: SellerDashboardProps) {
   const [orders, setOrders] = useState<Order[]>([]);
-  const [menuItems, setMenuItems] = useState<any[]>([]);
   const [stats, setStats] = useState({
     today: { orders: 0, revenue: 0 },
     pending: 0,
@@ -225,7 +218,7 @@ export function SellerDashboard({ user, onLogout }: SellerDashboardProps) {
       <div className="max-w-7xl mx-auto p-4 space-y-6">
         {/* Main Navigation Tabs */}
         <Tabs defaultValue="orders" className="w-full">
-          <TabsList className="grid w-full grid-cols-4 mb-6">
+          <TabsList className="grid w-full grid-cols-3 mb-6">
             <TabsTrigger value="orders" className="gap-2">
               <ShoppingBag className="w-4 h-4" />
               Orders
@@ -236,10 +229,6 @@ export function SellerDashboard({ user, onLogout }: SellerDashboardProps) {
             <TabsTrigger value="menu" className="gap-2">
               <UtensilsCrossed className="w-4 h-4" />
               Menu
-            </TabsTrigger>
-            <TabsTrigger value="promotions" className="gap-2">
-              <Tag className="w-4 h-4" />
-              Promotions
             </TabsTrigger>
             <TabsTrigger value="settings" className="gap-2">
               <SettingsIcon className="w-4 h-4" />
@@ -462,11 +451,6 @@ export function SellerDashboard({ user, onLogout }: SellerDashboardProps) {
           {/* MENU TAB */}
           <TabsContent value="menu" className="space-y-6">
             <MenuManagement shopId={user.shopId} shopName={user.name} />
-          </TabsContent>
-
-          {/* PROMOTIONS TAB */}
-          <TabsContent value="promotions" className="space-y-6">
-            <PromotionManagement shopId={user.shopId} menuItems={menuItems} />
           </TabsContent>
 
           {/* SETTINGS TAB */}

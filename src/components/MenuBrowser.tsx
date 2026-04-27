@@ -37,45 +37,29 @@ export function MenuBrowser({ onAddToCart }: MenuBrowserProps) {
   async function loadMenu() {
     setLoading(true);
     try {
-      const now = new Date();
-      // PostgreSQL dow: 0=Sun, 1=Mon … 6=Sat
-      const dow = now.getDay();
-      const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:00`;
-
-      const [itemsRes, schedulesRes, shopsRes] = await Promise.all([
+      const [itemsRes, shopsRes] = await Promise.all([
         supabase
           .from('menu_items')
-          .select('id, name, description, price, discount_percent, category, calories, is_healthy, is_special, image_url, preparation_time, shops!inner(shop_code, name, campus, description)')
+          .select('id, name, description, price, category, calories, is_healthy, is_special, image_url, preparation_time, shops!inner(shop_code, name, campus, description, discount_percent)')
           .eq('is_available', true),
         supabase
-          .from('item_discount_schedules')
-          .select('menu_item_id, discount_percent, days_of_week, start_time, end_time')
-          .eq('is_active', true),
-        supabase
           .from('shops')
-          .select('shop_code, name, description, campus')
+          .select('shop_code, name, description, campus, discount_percent')
           .eq('is_active', true),
       ]);
 
       const rawItems = itemsRes.data ?? [];
-      const schedules = schedulesRes.data ?? [];
       const rawShops = shopsRes.data ?? [];
 
-      // Build active time-discount map (highest wins per item)
-      const discountMap: Record<string, number> = {};
-      for (const s of schedules) {
-        const days: number[] = (s.days_of_week as number[]) ?? [];
-        if (!days.includes(dow)) continue;
-        if (currentTime < s.start_time || currentTime > s.end_time) continue;
-        const itemId = s.menu_item_id as string;
-        const pct = s.discount_percent as number;
-        if ((discountMap[itemId] ?? 0) < pct) discountMap[itemId] = pct;
+      // Build shop-level discount map (discount controlled per shop, not per item)
+      const shopDiscountMap: Record<string, number> = {};
+      for (const s of rawShops) {
+        shopDiscountMap[s.shop_code] = (s.discount_percent as number) ?? 0;
       }
 
       const mappedItems: MenuItem[] = rawItems.map((item: any) => {
-        const permanentPct = (item.discount_percent as number) ?? 0;
-        const scheduledPct = discountMap[item.id] ?? 0;
-        const effectivePct = Math.max(permanentPct, scheduledPct);
+        const shopCode = (item.shops as any)?.shop_code ?? '';
+        const effectivePct = shopDiscountMap[shopCode] ?? 0;
         const price = item.price as number;
         return {
           id: item.id,
@@ -90,7 +74,7 @@ export function MenuBrowser({ onAddToCart }: MenuBrowserProps) {
           isSpecial: item.is_special ?? false,
           image: item.image_url ?? '',
           preparationTime: item.preparation_time ?? 15,
-          shop: (item.shops as any)?.shop_code ?? '',
+          shop: shopCode,
         };
       });
 

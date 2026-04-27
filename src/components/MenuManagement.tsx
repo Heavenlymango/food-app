@@ -6,7 +6,6 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { Switch } from './ui/switch';
-import { Badge } from './ui/badge';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { toast } from 'sonner@2.0.3';
@@ -37,7 +36,7 @@ interface RawItem {
 const EMPTY_FORM = {
   name: '', description: '', price: '', category: 'Main Course',
   calories: '', preparation_time: '15', is_healthy: false, is_special: false,
-  is_available: true, image_url: '', discount_percent: '0',
+  is_available: true, image_url: '',
 };
 
 export function MenuManagement({ shopId }: MenuManagementProps) {
@@ -98,7 +97,6 @@ export function MenuManagement({ shopId }: MenuManagementProps) {
       is_special: item.is_special ?? false,
       is_available: item.is_available ?? true,
       image_url: item.image_url ?? '',
-      discount_percent: (item.discount_percent ?? 0).toString(),
     });
     setIsDialogOpen(true);
   }
@@ -119,7 +117,6 @@ export function MenuManagement({ shopId }: MenuManagementProps) {
       is_special: form.is_special,
       is_available: form.is_available,
       image_url: form.image_url.trim() || null,
-      discount_percent: parseFloat(form.discount_percent) || 0,
     };
     try {
       if (editingItem) {
@@ -255,9 +252,6 @@ export function MenuManagement({ shopId }: MenuManagementProps) {
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-semibold text-sm">{item.name}</p>
                     {item.is_healthy && <Leaf className="w-3 h-3 text-green-500" />}
-                    {(item.discount_percent ?? 0) > 0 && (
-                      <Badge className="bg-orange-500 text-xs">-{item.discount_percent}%</Badge>
-                    )}
                   </div>
                   <p className="text-xs text-gray-500">{item.category} · ${item.price.toFixed(2)}</p>
                 </div>
