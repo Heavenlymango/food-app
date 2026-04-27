@@ -5,10 +5,8 @@ import { Label } from './ui/label';
 import { Card } from './ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Alert, AlertDescription } from './ui/alert';
-import { User, Store, Shield, AlertCircle, Mail } from 'lucide-react';
-import { api } from '../utils/api';
-import { OTPVerification } from './OTPVerification';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { AlertCircle } from 'lucide-react';
+import { supabase, toEmail } from '../utils/supabase/client';
 import logo from 'figma:asset/4b19b246aa3bf4bb775a1c4bcd3c068341bc26c6.png';
 
 interface AuthFormProps {
@@ -18,14 +16,8 @@ interface AuthFormProps {
 export function AuthForm({ onAuthSuccess }: AuthFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [showOTPVerification, setShowOTPVerification] = useState(false);
-  const [showForgotPassword, setShowForgotPassword] = useState(false);
-  const [otpEmail, setOtpEmail] = useState('');
-  const [otpName, setOtpName] = useState('');
-  const [otpStudentId, setOtpStudentId] = useState('');
-  const [otpType, setOtpType] = useState<'register' | 'login' | 'reset'>('register');
-  
-  // Student Registration
+
+  // Student registration
   const [studentId, setStudentId] = useState('');
   const [studentName, setStudentName] = useState('');
   const [studentEmail, setStudentEmail] = useState('');
@@ -34,26 +26,33 @@ export function AuthForm({ onAuthSuccess }: AuthFormProps) {
   // Login
   const [loginId, setLoginId] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
-  const [loginMethod, setLoginMethod] = useState<'password' | 'otp'>('password');
-  const [loginEmail, setLoginEmail] = useState('');
-  
-  // Forgot Password
-  const [resetIdentifier, setResetIdentifier] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [resetStep, setResetStep] = useState<'request' | 'verify' | 'reset'>('request');
 
-  const handleStudentRegister = async (e: React.FormEvent) => {
+  // Password reset
+  const [showReset, setShowReset] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetSent, setResetSent] = useState(false);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError('');
+    try {
+      const email = toEmail(loginId.trim());
+      const { error } = await supabase.auth.signInWithPassword({ email, password: loginPassword });
+      if (error) throw error;
+      // App.tsx onAuthStateChange will update user automatically
+    } catch (err: any) {
+      setError(err.message || 'Login failed');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError('');
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(studentEmail)) {
-      setError('Please enter a valid school email address');
-      setIsLoading(false);
-      return;
-    }
     if (studentPassword.length < 6) {
       setError('Password must be at least 6 characters');
       setIsLoading(false);
@@ -61,490 +60,161 @@ export function AuthForm({ onAuthSuccess }: AuthFormProps) {
     }
 
     try {
-      // Auth email uses studentId@student.local — matches Flutter app convention.
-      // Real school email is stored in user metadata for admin review / future use.
-      const authEmail = `${studentId}@student.local`;
       const campus = studentEmail.toLowerCase().includes('ifl') ? 'IFL' : 'RUPP';
+      const authEmail = `${studentId.trim()}@student.local`;
 
-      const response = await fetch(
-        `https://${projectId}.supabase.co/auth/v1/signup`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': publicAnonKey,
-            'Authorization': `Bearer ${publicAnonKey}`,
+      const { data, error } = await supabase.auth.signUp({
+        email: authEmail,
+        password: studentPassword,
+        options: {
+          data: {
+            name: studentName.trim(),
+            student_id: studentId.trim(),
+            campus,
+            role: 'student',
+            school_email: studentEmail.trim(),
           },
-          body: JSON.stringify({
-            email: authEmail,
-            password: studentPassword,
-            data: {
-              name: studentName,
-              student_id: studentId,
-              campus,
-              role: 'student',
-              school_email: studentEmail,
-            },
-          }),
-        }
-      );
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.message || data.error_description || 'Registration failed');
-      }
-
-      // Auto-login after registration
-      if (data.access_token) {
-        onAuthSuccess({
-          id: data.user.id,
-          name: studentName,
-          studentId,
-          role: 'student',
-          campus,
-          schoolEmail: studentEmail,
-        });
-      } else {
-        // Email confirmation enabled in Supabase — ask user to check email
-        setError('');
-        alert('Account created! Please check your email to confirm, then log in.');
-      }
-    } catch (err: any) {
-      console.error('Registration error:', err);
-      setError(err.message || 'Registration failed. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setError('');
-
-    try {
-      const data = await api.post('/api/auth/login', {
-        userId: loginId,
-        password: loginPassword,
+        },
       });
+      if (error) throw error;
 
-      onAuthSuccess(data.user);
+      if (!data.session) {
+        // Email confirmation required
+        alert('Account created! Check your email to confirm, then log in.');
+      }
+      // If auto-confirmed, onAuthStateChange fires in App.tsx
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'Registration failed');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleLoginWithOTP = async (e: React.FormEvent) => {
+  const handlePasswordReset = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError('');
-
-    // Basic email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(loginEmail)) {
-      setError('Please enter a valid email address');
-      setIsLoading(false);
-      return;
-    }
-
     try {
-      // Send OTP to email for login
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-36162e30/api/auth/send-login-otp`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${publicAnonKey}`,
-          },
-          body: JSON.stringify({
-            email: loginEmail,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to send OTP');
-      }
-
-      const data = await response.json();
-      
-      // For demo: Show OTP in alert (REMOVE IN PRODUCTION!)
-      if (data.debug?.otp) {
-        alert(`📧 Demo Mode: Your OTP is ${data.debug.otp}\n\nIn production, this would be sent to your email.`);
-      }
-
-      // Show OTP verification screen
-      setOtpEmail(loginEmail);
-      setOtpName(data.name || '');
-      setOtpStudentId(data.studentId || '');
-      setOtpType('login');
-      setShowOTPVerification(true);
-    } catch (err: any) {
-      console.error('Login OTP error:', err);
-      setError(err.message || 'Failed to send login code. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleForgotPasswordRequest = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setError('');
-
-    // Basic email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(resetIdentifier)) {
-      setError('Please enter a valid email address');
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      // Send OTP for password reset
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-36162e30/api/auth/send-otp`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${publicAnonKey}`,
-          },
-          body: JSON.stringify({
-            email: resetIdentifier,
-            type: 'reset',
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to send reset code');
-      }
-
-      const data = await response.json();
-      
-      // For demo: Show OTP in alert (REMOVE IN PRODUCTION!)
-      if (data.debug?.otp) {
-        alert(`📧 Demo Mode: Your OTP is ${data.debug.otp}\n\nIn production, this would be sent to your email.`);
-      }
-
-      // Show OTP verification screen
-      setOtpEmail(resetIdentifier);
-      setOtpName('');
-      setOtpStudentId('');
-      setOtpType('reset');
-      setShowOTPVerification(true);
-      setShowForgotPassword(false);
-    } catch (err: any) {
-      console.error('Forgot password error:', err);
-      setError(err.message || 'Failed to send reset code. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleForgotPasswordReset = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setError('');
-
-    if (newPassword !== confirmPassword) {
-      setError('Passwords do not match');
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      const data = await api.post('/api/auth/reset-password', {
-        email: otpEmail,
-        otp: otpStudentId, // Reusing otpStudentId for OTP
-        newPassword,
+      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail.trim(), {
+        redirectTo: `${window.location.origin}/food-app/`,
       });
-
-      onAuthSuccess(data.user);
+      if (error) throw error;
+      setResetSent(true);
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'Failed to send reset email');
     } finally {
       setIsLoading(false);
     }
   };
+
+  if (showReset) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 to-red-50 p-4">
+        <Card className="w-full max-w-md p-6">
+          <Button variant="ghost" size="sm" onClick={() => { setShowReset(false); setResetSent(false); setError(''); }} className="mb-4">
+            ← Back to Login
+          </Button>
+          <h2 className="text-xl font-bold mb-4">Reset Password</h2>
+          {resetSent ? (
+            <p className="text-green-600">Check your email for a reset link.</p>
+          ) : (
+            <>
+              {error && <Alert variant="destructive" className="mb-4"><AlertCircle className="h-4 w-4" /><AlertDescription>{error}</AlertDescription></Alert>}
+              <form onSubmit={handlePasswordReset} className="space-y-4">
+                <div className="space-y-2">
+                  <Label>School Email</Label>
+                  <Input type="email" placeholder="your.email@rupp.edu.kh" value={resetEmail} onChange={e => setResetEmail(e.target.value)} required />
+                </div>
+                <Button type="submit" className="w-full bg-orange-600 hover:bg-orange-700" disabled={isLoading}>
+                  {isLoading ? 'Sending…' : 'Send Reset Link'}
+                </Button>
+              </form>
+            </>
+          )}
+        </Card>
+      </div>
+    );
+  }
 
   return (
-    <>
-      {showOTPVerification ? (
-        <OTPVerification
-          email={otpEmail}
-          name={otpName}
-          studentId={otpStudentId}
-          otpType={otpType}
-          onVerificationSuccess={onAuthSuccess}
-          onBack={() => {
-            setShowOTPVerification(false);
-            setShowForgotPassword(false);
-          }}
-        />
-      ) : showForgotPassword ? (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 to-red-50 p-4">
-          <Card className="w-full max-w-md p-6">
-            <div className="mb-6">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowForgotPassword(false)}
-                className="mb-4"
-              >
-                ← Back to Login
-              </Button>
-              <h2 className="text-2xl font-bold text-center">Forgot Password</h2>
-              <p className="text-center text-muted-foreground mt-2">
-                Enter your email to receive a verification code
-              </p>
-            </div>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 to-red-50 p-4">
+      <Card className="w-full max-w-md p-6">
+        <div className="text-center mb-6">
+          <img src={logo} alt="Campus Food" className="w-48 h-auto mx-auto mb-4" />
+          <p className="text-gray-600">Register or Login to continue</p>
+        </div>
 
-            {error && (
-              <Alert variant="destructive" className="mb-4">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
+        {error && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
 
-            <form onSubmit={handleForgotPasswordRequest} className="space-y-4">
+        <Tabs defaultValue="login" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="login">Login</TabsTrigger>
+            <TabsTrigger value="register">Register</TabsTrigger>
+          </TabsList>
+
+          {/* ── Login ─────────────────────────────────────────────────────── */}
+          <TabsContent value="login">
+            <form onSubmit={handleLogin} className="space-y-4 mt-4">
               <div className="space-y-2">
-                <Label htmlFor="resetIdentifier">Email Address</Label>
+                <Label>Student ID, Seller ID, or Email</Label>
                 <Input
-                  id="resetIdentifier"
-                  type="email"
-                  placeholder="your.email@rupp.edu.kh"
-                  value={resetIdentifier}
-                  onChange={(e) => setResetIdentifier(e.target.value)}
+                  placeholder="e.g., 20230001 or A1"
+                  value={loginId}
+                  onChange={e => setLoginId(e.target.value)}
                   required
                 />
               </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Password</Label>
+                  <button type="button" onClick={() => { setShowReset(true); setError(''); }}
+                    className="text-xs text-orange-600 hover:underline">
+                    Forgot password?
+                  </button>
+                </div>
+                <Input type="password" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} required />
+              </div>
+              <Button type="submit" className="w-full bg-orange-600 hover:bg-orange-700" disabled={isLoading}>
+                {isLoading ? 'Logging in…' : 'Login'}
+              </Button>
+              <p className="text-xs text-gray-500 text-center">
+                Sellers: use your shop code (A1, B2, IFL-1) · default password: <strong>campus123</strong>
+              </p>
+            </form>
+          </TabsContent>
 
-              <Button
-                type="submit"
-                className="w-full bg-orange-600 hover:bg-orange-700"
-                disabled={isLoading}
-              >
-                {isLoading ? 'Sending Code...' : 'Send Reset Code'}
+          {/* ── Student Register ───────────────────────────────────────────── */}
+          <TabsContent value="register">
+            <form onSubmit={handleRegister} className="space-y-4 mt-4">
+              <div className="space-y-2">
+                <Label>Student ID</Label>
+                <Input placeholder="e.g., 20230001" value={studentId} onChange={e => setStudentId(e.target.value)} required />
+              </div>
+              <div className="space-y-2">
+                <Label>Full Name</Label>
+                <Input placeholder="Your full name" value={studentName} onChange={e => setStudentName(e.target.value)} required />
+              </div>
+              <div className="space-y-2">
+                <Label>School Email</Label>
+                <Input type="email" placeholder="your.email@rupp.edu.kh" value={studentEmail} onChange={e => setStudentEmail(e.target.value)} required />
+                <p className="text-xs text-muted-foreground">Used to determine your campus (RUPP / IFL)</p>
+              </div>
+              <div className="space-y-2">
+                <Label>Password</Label>
+                <Input type="password" placeholder="Min 6 characters" value={studentPassword} onChange={e => setStudentPassword(e.target.value)} required minLength={6} />
+              </div>
+              <Button type="submit" className="w-full bg-orange-600 hover:bg-orange-700" disabled={isLoading}>
+                {isLoading ? 'Creating account…' : 'Create Account'}
               </Button>
             </form>
-          </Card>
-        </div>
-      ) : (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 to-red-50 p-4">
-          <Card className="w-full max-w-md p-6">
-            <div className="text-center mb-6">
-              <img 
-                src={logo} 
-                alt="Campus Food Ordering System" 
-                className="w-48 h-auto mx-auto mb-4"
-              />
-              <p className="text-gray-600">Register or Login to continue</p>
-            </div>
-
-            {error && (
-              <Alert variant="destructive" className="mb-4">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-
-            <Tabs defaultValue="login" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="login">Login</TabsTrigger>
-                <TabsTrigger value="student">Student Register</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="login">
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2 mb-4">
-                    <User className="h-5 w-5 text-orange-600" />
-                    <h3>Login</h3>
-                  </div>
-
-                  {/* Login Method Toggle */}
-                  <div className="flex items-center justify-center gap-2 mb-4">
-                    <Button
-                      type="button"
-                      variant={loginMethod === 'password' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setLoginMethod('password')}
-                      className={loginMethod === 'password' ? 'bg-orange-600 hover:bg-orange-700' : ''}
-                    >
-                      Password
-                    </Button>
-                    <Button
-                      type="button"
-                      variant={loginMethod === 'otp' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setLoginMethod('otp')}
-                      className={loginMethod === 'otp' ? 'bg-orange-600 hover:bg-orange-700' : ''}
-                    >
-                      Email OTP
-                    </Button>
-                  </div>
-
-                  {loginMethod === 'password' ? (
-                    <form onSubmit={handleLogin} className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="loginId">Student ID or Seller ID</Label>
-                        <Input
-                          id="loginId"
-                          placeholder="e.g., 20230001 or A1"
-                          value={loginId}
-                          onChange={(e) => setLoginId(e.target.value)}
-                          required
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <Label htmlFor="loginPassword">Password</Label>
-                          <Button
-                            type="button"
-                            variant="link"
-                            size="sm"
-                            onClick={() => setShowForgotPassword(true)}
-                            className="text-xs text-orange-600 p-0 h-auto"
-                          >
-                            Forgot Password?
-                          </Button>
-                        </div>
-                        <Input
-                          id="loginPassword"
-                          type="password"
-                          value={loginPassword}
-                          onChange={(e) => setLoginPassword(e.target.value)}
-                          required
-                        />
-                      </div>
-
-                      <Button
-                        type="submit"
-                        className="w-full bg-orange-600 hover:bg-orange-700"
-                        disabled={isLoading}
-                      >
-                        {isLoading ? 'Logging in...' : 'Login'}
-                      </Button>
-
-                      <p className="text-sm text-gray-500 text-center mt-4">
-                        Sellers: Login with your shop ID (e.g., A1, B2, IFL-1)
-                        <br />
-                        Default password: campus123
-                      </p>
-                    </form>
-                  ) : (
-                    <form onSubmit={handleLoginWithOTP} className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="loginEmail">Email Address</Label>
-                        <Input
-                          id="loginEmail"
-                          type="email"
-                          placeholder="your.email@rupp.edu.kh"
-                          value={loginEmail}
-                          onChange={(e) => setLoginEmail(e.target.value)}
-                          required
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          We'll send a verification code to this email
-                        </p>
-                      </div>
-
-                      <Button
-                        type="submit"
-                        className="w-full bg-orange-600 hover:bg-orange-700"
-                        disabled={isLoading}
-                      >
-                        {isLoading ? 'Sending Code...' : 'Send Login Code'}
-                      </Button>
-
-                      <p className="text-sm text-gray-500 text-center mt-4">
-                        For students only. Sellers must use password login.
-                      </p>
-                    </form>
-                  )}
-                </div>
-              </TabsContent>
-
-              <TabsContent value="student">
-                <form onSubmit={handleStudentRegister} className="space-y-4">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Mail className="h-5 w-5 text-orange-600" />
-                    <h3>Student Registration</h3>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="studentId">Student ID</Label>
-                    <Input
-                      id="studentId"
-                      placeholder="e.g., 20230001"
-                      value={studentId}
-                      onChange={(e) => setStudentId(e.target.value)}
-                      required
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="studentName">Full Name</Label>
-                    <Input
-                      id="studentName"
-                      placeholder="Your full name"
-                      value={studentName}
-                      onChange={(e) => setStudentName(e.target.value)}
-                      required
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="studentEmail">School Email *</Label>
-                    <Input
-                      id="studentEmail"
-                      type="email"
-                      placeholder="your.email@rupp.edu.kh"
-                      value={studentEmail}
-                      onChange={(e) => setStudentEmail(e.target.value)}
-                      required
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Stored for admin review & password reset
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="studentPassword">Password *</Label>
-                    <Input
-                      id="studentPassword"
-                      type="password"
-                      placeholder="Min 6 characters"
-                      value={studentPassword}
-                      onChange={(e) => setStudentPassword(e.target.value)}
-                      required
-                      minLength={6}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Your account is active immediately. Admin may review later.
-                    </p>
-                  </div>
-
-                  <Button
-                    type="submit"
-                    className="w-full bg-orange-600 hover:bg-orange-700"
-                    disabled={isLoading}
-                  >
-                    {isLoading ? 'Creating Account...' : 'Create Account'}
-                  </Button>
-                </form>
-              </TabsContent>
-            </Tabs>
-          </Card>
-        </div>
-      )}
-    </>
+          </TabsContent>
+        </Tabs>
+      </Card>
+    </div>
   );
 }
