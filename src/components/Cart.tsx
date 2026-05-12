@@ -16,10 +16,10 @@ interface CartProps {
 export function Cart({ cart, onUpdateQuantity, onPlaceOrder }: CartProps) {
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
 
-  const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const subtotal = cart.reduce((sum, item) => sum + item.discountedPrice * item.quantity, 0);
   const totalSavings = cart
-    .filter(item => item.isSpecial)
-    .reduce((sum, item) => sum + ((item.price / 0.7) - item.price) * item.quantity, 0);
+    .filter(item => (item.discountPercent ?? 0) > 0)
+    .reduce((sum, item) => sum + (item.price - item.discountedPrice) * item.quantity, 0);
   const tax = subtotal * 0.08;
   const total = subtotal + tax;
 
@@ -110,7 +110,6 @@ export function Cart({ cart, onUpdateQuantity, onPlaceOrder }: CartProps) {
       <div className="space-y-4">
         {Object.entries(itemsByShop).map(([shopId, items]) => {
           const shop = SHOPS.find(s => s.id === shopId);
-          if (!shop) return null;
 
           return (
             <div key={shopId} className="space-y-3">
@@ -120,11 +119,13 @@ export function Cart({ cart, onUpdateQuantity, onPlaceOrder }: CartProps) {
                   <Store className="w-4 h-4 text-white" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-sm">{shop.name}</h3>
+                  <h3 className="text-sm">{shop?.name ?? shopId}</h3>
                 </div>
-                <Badge variant="outline" className="text-xs">
-                  {shop.campus === 'RUPP' ? '🎓 RUPP' : '📚 IFL'}
-                </Badge>
+                {shop && (
+                  <Badge variant="outline" className="text-xs">
+                    {shop.campus === 'RUPP' ? '🎓 RUPP' : '📚 IFL'}
+                  </Badge>
+                )}
               </div>
 
               {/* Shop Items */}
@@ -150,19 +151,19 @@ export function Cart({ cart, onUpdateQuantity, onPlaceOrder }: CartProps) {
                                   Healthy
                                 </Badge>
                               )}
-                              {item.isSpecial && (
+                              {(item.discountPercent ?? 0) > 0 && (
                                 <Badge className="bg-orange-500 text-xs px-1.5 py-0">
-                                  -30%
+                                  -{item.discountPercent?.toFixed(0)}%
                                 </Badge>
                               )}
                             </div>
                           </div>
 
                           <div className="text-right flex-shrink-0">
-                            <p className="text-sm text-orange-600">${(item.price * item.quantity).toFixed(2)}</p>
-                            {item.isSpecial && (
+                            <p className="text-sm text-orange-600">${(item.discountedPrice * item.quantity).toFixed(2)}</p>
+                            {(item.discountPercent ?? 0) > 0 && (
                               <p className="text-xs text-gray-400 line-through">
-                                ${((item.price / 0.7) * item.quantity).toFixed(2)}
+                                ${(item.price * item.quantity).toFixed(2)}
                               </p>
                             )}
                           </div>
@@ -258,7 +259,7 @@ export function Cart({ cart, onUpdateQuantity, onPlaceOrder }: CartProps) {
           </div>
           {totalSavings > 0 && (
             <div className="flex justify-between text-green-600">
-              <span>Savings (30%)</span>
+              <span>Discount savings</span>
               <span>-${totalSavings.toFixed(2)}</span>
             </div>
           )}

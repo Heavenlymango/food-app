@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { MenuBrowser } from './components/MenuBrowser';
+import { FoodScan } from './components/FoodScan';
 import { Cart } from './components/Cart';
 import { OrderTracker } from './components/OrderTracker';
 import { Recommendations } from './components/Recommendations';
@@ -9,7 +10,7 @@ import { SellerDashboard } from './components/SellerDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
 import { NotificationBell } from './components/NotificationBell';
 import { MessageNotificationMonitor } from './components/MessageNotificationMonitor';
-import { UtensilsCrossed, ShoppingCart, Receipt, Lightbulb, User, LogOut } from 'lucide-react';
+import { UtensilsCrossed, ShoppingCart, Receipt, Lightbulb, User, LogOut, ScanLine } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Badge } from './components/ui/badge';
 import { Toaster } from './components/ui/sonner';
@@ -63,6 +64,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'menu' | 'cart' | 'orders' | 'recommendations' | 'profile'>('menu');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [showScan, setShowScan] = useState(false);
 
   // ── Auth via Supabase (mirrors Flutter AuthProvider) ──────────────────────
   useEffect(() => {
@@ -166,11 +168,24 @@ export default function App() {
   // ── Place order (mirrors Flutter placeOrder) ──────────────────────────────
   const placeOrder = async (orderType: 'pickup' | 'dine-in') => {
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { alert('Please log in to place an order'); return; }
-    if (user?.role !== 'student') { alert('Only students can place orders'); return; }
+    if (!session) { toast.error('Please log in to place an order'); return; }
+    if (user?.role !== 'student') { toast.error('Only students can place orders'); return; }
+    if (cart.length === 0) return;
+
+    // Resolve shop code ('A1', 'IFL-NC', …) → UUID required by orders.shop_id
+    const shopCode = cart[0]?.shop;
+    const { data: shopData, error: shopErr } = await supabase
+      .from('shops')
+      .select('id')
+      .eq('shop_code', shopCode)
+      .single();
+
+    if (shopErr || !shopData) {
+      toast.error(`Shop "${shopCode}" not found. Please try again.`);
+      return;
+    }
 
     const total = cart.reduce((sum, item) => sum + item.discountedPrice * item.quantity, 0);
-    const shopId = cart[0]?.shop;
     const estimatedMinutes = calculateEstimatedMinutes(cart);
 
     try {
@@ -183,7 +198,8 @@ export default function App() {
             'Authorization': `Bearer ${session.access_token}`,
           },
           body: JSON.stringify({
-            shopId,
+            shopId: shopData.id,
+            serviceType: orderType,
             items: cart.map(item => ({
               menuItemId: item.id,
               name: item.name,
@@ -240,6 +256,17 @@ export default function App() {
             <div className="flex-1 min-w-0">
               <p className="text-xs text-gray-500">Student: {user.name}</p>
             </div>
+            {activeTab === 'menu' && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowScan(true)}
+                className="text-orange-600 hover:bg-orange-50 flex items-center gap-1"
+              >
+                <ScanLine className="w-4 h-4" />
+                <span className="text-xs font-medium">Scan</span>
+              </Button>
+            )}
             <NotificationBell
               studentId={user.id}
               onNotificationClick={() => setActiveTab('orders')}
@@ -255,6 +282,10 @@ export default function App() {
           </div>
         </div>
       </header>
+
+      {showScan && (
+        <FoodScan onAddToCart={addToCart} onClose={() => setShowScan(false)} />
+      )}
 
       <main className="px-4 py-4 max-w-lg mx-auto">
         {activeTab === 'menu' && <MenuBrowser onAddToCart={addToCart} />}

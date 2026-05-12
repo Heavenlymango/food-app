@@ -13,7 +13,8 @@ interface MenuItemCardProps {
 
 export function MenuItemCard({ item, onAddToCart }: MenuItemCardProps) {
   const [added, setAdded] = useState(false);
-  const hasDiscount = item.discountPercent > 0;
+  const displayPrice = item.discountedPrice ?? item.price;
+  const hasDiscount = (item.discountPercent ?? 0) > 0;
 
   const handleAdd = () => {
     onAddToCart(item);
@@ -55,7 +56,7 @@ export function MenuItemCard({ item, onAddToCart }: MenuItemCardProps) {
               {hasDiscount && (
                 <span className="text-gray-400 line-through text-xs">${item.price.toFixed(2)}</span>
               )}
-              <span className="text-orange-600 font-bold">${item.discountedPrice.toFixed(2)}</span>
+              <span className="text-orange-600 font-bold">${displayPrice.toFixed(2)}</span>
             </div>
             <Button onClick={handleAdd} size="sm"
               className={`h-8 px-3 transition-colors ${added ? 'bg-green-600 hover:bg-green-600' : 'bg-orange-600 hover:bg-orange-700'}`}>
