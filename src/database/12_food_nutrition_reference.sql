@@ -4,7 +4,7 @@
 
 CREATE TABLE IF NOT EXISTS food_nutrition_reference (
   id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  food_class          VARCHAR(100) UNIQUE NOT NULL, -- matches Roboflow model class name
+  food_class          VARCHAR(100) UNIQUE NOT NULL, -- matches model class name (class_names.json)
   display_name        VARCHAR(255) NOT NULL,
   description         TEXT,
   calories_per_serving INTEGER NOT NULL DEFAULT 0,
