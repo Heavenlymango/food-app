@@ -75,7 +75,7 @@ VALUES
  'Cambodian-style baguette sandwich stuffed with grilled meat, pickled vegetables, chili and herbs.',
  350, 18.0, 44.0, 10.0, 3.0, 220, false, 'Khmer'),
 
-('rice_porridge',
+('rice porridge',
  'Rice Porridge (Bobor)',
  'Congee-style rice porridge cooked until silky smooth, typically served with ginger and spring onion.',
  200, 8.0, 38.0, 3.0, 1.0, 400, true, 'Khmer'),
