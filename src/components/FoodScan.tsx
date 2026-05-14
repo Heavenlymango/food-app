@@ -6,7 +6,7 @@ import { ImageWithFallback } from './figma/ImageWithFallback';
 import { Camera, Upload, X, Loader2, Plus, CheckCircle2, Flame, Leaf, ArrowLeft, ZoomIn, Flag, ThumbsUp, ThumbsDown, Send } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 
-const INFERENCE_API = 'http://localhost:8000';
+const INFERENCE_API = import.meta.env.VITE_INFERENCE_API ?? 'http://localhost:8000';
 
 const ALL_CLASSES = [
   'amok', 'bai_sach_chrouk', 'banana_pancakes', 'buddha_bowl', 'curry',
