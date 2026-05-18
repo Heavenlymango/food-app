@@ -7,6 +7,8 @@ Usage (from C:/Users/school/Documents/pp):
 """
 
 import io
+import os
+import urllib.request
 from pathlib import Path
 
 import numpy as np
@@ -21,6 +23,24 @@ MODEL_DIR = BASE / "model"
 
 MOBILENET_PATH = MODEL_DIR / "MobileNet/mobilenet_output/mobilenet_food.onnx"
 YOLO_PATH      = MODEL_DIR / "YoloSmall/train/weights/best.onnx"
+
+def _download(url: str, dest: Path) -> None:
+    """Download a file if it doesn't already exist locally."""
+    if dest.exists():
+        return
+    print(f"Downloading {dest.name} from {url} …")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    urllib.request.urlretrieve(url, dest)
+    print(f"  → saved {dest}  ({dest.stat().st_size // 1024 // 1024} MB)")
+
+# Download models from Supabase Storage on first boot (Railway / cloud).
+# Set MOBILENET_URL and YOLO_URL as environment variables in Railway.
+_mobilenet_url = os.environ.get("MOBILENET_URL")
+_yolo_url      = os.environ.get("YOLO_URL")
+if _mobilenet_url:
+    _download(_mobilenet_url, MOBILENET_PATH)
+if _yolo_url:
+    _download(_yolo_url, YOLO_PATH)
 
 CLASS_NAMES = [
     "amok", "bai_sach_chrouk", "banana_pancakes", "buddha_bowl", "curry",
@@ -144,4 +164,5 @@ if __name__ == "__main__":
     print("Press Ctrl+C to stop.\n")
     # Pre-load MobileNet at startup so first request is fast
     get_mobilenet()
-    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="warning")
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
