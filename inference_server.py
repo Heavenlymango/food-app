@@ -7,7 +7,6 @@ Usage (from C:/Users/school/Documents/pp):
 """
 
 import io
-import json
 from pathlib import Path
 
 import numpy as np
@@ -22,7 +21,16 @@ MODEL_DIR = BASE / "model"
 
 MOBILENET_PATH = MODEL_DIR / "MobileNet/mobilenet_output/mobilenet_food.onnx"
 YOLO_PATH      = MODEL_DIR / "YoloSmall/train/weights/best.onnx"
-CLASS_NAMES    = json.loads((MODEL_DIR / "MobileNet/mobilenet_output/class_names.json").read_text())
+
+CLASS_NAMES = [
+    "amok", "bai_sach_chrouk", "banana_pancakes", "buddha_bowl", "curry",
+    "dumplings", "french_fries", "fried_egg", "fried_rice", "grilled_corn",
+    "grilled_pork_ribs", "grilled_skewer", "hamburger", "khor_ko", "kuy_teav",
+    "laksa", "lok_lak", "nom_banh_chok", "num_pang", "pad_thai",
+    "papaya_salad", "pho", "pizza", "pleah_sach_ko", "ramen",
+    "rice porridge", "samlor_korko", "samlor_machu", "spring_rolls", "sushi",
+    "tofu_bowl", "tom_yum_soup",
+]
 
 # ── lazy session holders ──────────────────────────────────────────────────────
 _mobilenet: ort.InferenceSession | None = None
