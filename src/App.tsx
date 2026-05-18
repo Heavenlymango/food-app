@@ -3,14 +3,14 @@ import { MenuBrowser } from './components/MenuBrowser';
 import { FoodScan } from './components/FoodScan';
 import { Cart } from './components/Cart';
 import { OrderTracker } from './components/OrderTracker';
-import { Recommendations } from './components/Recommendations';
+import { NutritionDashboard } from './components/NutritionDashboard';
 import { StudentProfile } from './components/StudentProfile';
 import { AuthForm } from './components/AuthForm';
 import { SellerDashboard } from './components/SellerDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
 import { NotificationBell } from './components/NotificationBell';
 import { MessageNotificationMonitor } from './components/MessageNotificationMonitor';
-import { UtensilsCrossed, ShoppingCart, Receipt, Lightbulb, User, LogOut, ScanLine } from 'lucide-react';
+import { UtensilsCrossed, ShoppingCart, Receipt, BarChart2, User, LogOut, ScanLine } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Badge } from './components/ui/badge';
 import { Toaster } from './components/ui/sonner';
@@ -61,7 +61,7 @@ export interface Order {
 export default function App() {
   const [user, setUser] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'menu' | 'cart' | 'orders' | 'recommendations' | 'profile'>('menu');
+  const [activeTab, setActiveTab] = useState<'menu' | 'cart' | 'orders' | 'dashboard' | 'profile'>('menu');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [showScan, setShowScan] = useState(false);
@@ -95,7 +95,7 @@ export default function App() {
 
     const { data, error } = await supabase
       .from('orders')
-      .select('*, shops!inner(shop_code, name), order_items(*)')
+      .select('*, shops!inner(shop_code, name), order_items(*, menu_items(calories))')
       .eq('student_id', session.user.id)
       .order('ordered_at', { ascending: false })
       .limit(50);
@@ -112,7 +112,7 @@ export default function App() {
         discountPercent: 0,
         discountedPrice: oi.unit_price,
         category: '',
-        calories: 0,
+        calories: (oi.menu_items as any)?.calories ?? 0,
         isHealthy: false,
         isSpecial: false,
         image: '',
@@ -289,7 +289,7 @@ export default function App() {
 
       <main className="px-4 py-4 max-w-lg mx-auto">
         {activeTab === 'menu' && <MenuBrowser onAddToCart={addToCart} />}
-        {activeTab === 'recommendations' && <Recommendations onAddToCart={addToCart} />}
+        {activeTab === 'dashboard' && <NutritionDashboard orders={orders} />}
         {activeTab === 'cart' && (
           <Cart cart={cart} onUpdateQuantity={updateQuantity} onPlaceOrder={placeOrder} />
         )}
@@ -308,7 +308,7 @@ export default function App() {
             { tab: 'menu', icon: UtensilsCrossed, label: 'Menu' },
             { tab: 'cart', icon: ShoppingCart, label: 'Cart', badge: cartItemCount },
             { tab: 'orders', icon: Receipt, label: 'Orders', dot: orders.some(o => o.status === 'ready') },
-            { tab: 'recommendations', icon: Lightbulb, label: 'Tips' },
+            { tab: 'dashboard', icon: BarChart2, label: 'Dashboard' },
             { tab: 'profile', icon: User, label: 'Profile' },
           ].map(({ tab, icon: Icon, label, badge, dot }) => (
             <button

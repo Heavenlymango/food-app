@@ -2,10 +2,80 @@ import { CartItem } from '../App';
 import { Button } from './ui/button';
 import { Card, CardContent, CardFooter, CardHeader } from './ui/card';
 import { Badge } from './ui/badge';
-import { Minus, Plus, Trash2, ShoppingBag, Store, Clock, Flame, Leaf } from 'lucide-react';
+import { Minus, Plus, Trash2, ShoppingBag, Store, Clock, Flame, ChevronDown, ChevronUp } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import { SHOPS } from '../data/menuData';
 import { useState } from 'react';
+
+const DAILY_GOAL = 2000;
+const AVG_MEAL_KCAL = 600;
+
+function CaloriePreview({ totalCalories }: { totalCalories: number }) {
+  const [open, setOpen] = useState(false);
+  const ratio = totalCalories / AVG_MEAL_KCAL;
+
+  const { msg, color } = (() => {
+    if (totalCalories === 0) return { msg: 'Add items to see calorie info.', color: 'gray' };
+    if (totalCalories < 400) return { msg: 'Light meal — consider adding a protein-rich side.', color: 'blue' };
+    if (totalCalories <= 700) return { msg: 'Great portion! Well within a healthy meal range.', color: 'green' };
+    if (totalCalories <= 900) return { msg: 'Slightly above average — consider skipping a snack later.', color: 'orange' };
+    return { msg: 'Heavy meal. Try to eat lighter at your next meal.', color: 'red' };
+  })();
+
+  const colorMap: Record<string, string> = {
+    gray: 'bg-gray-50 border-gray-200 text-gray-700',
+    blue: 'bg-blue-50 border-blue-200 text-blue-700',
+    green: 'bg-green-50 border-green-200 text-green-700',
+    orange: 'bg-orange-50 border-orange-200 text-orange-700',
+    red: 'bg-red-50 border-red-200 text-red-700',
+  };
+
+  return (
+    <div className="mt-2">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1 text-xs text-green-600 hover:text-green-700 font-medium"
+      >
+        <Flame className="w-3 h-3" />
+        {totalCalories} kcal total
+        {open ? <ChevronUp className="w-3 h-3 ml-1" /> : <ChevronDown className="w-3 h-3 ml-1" />}
+        <span className="text-gray-400 ml-1">· Calorie Preview</span>
+      </button>
+
+      {open && (
+        <div className="mt-2 space-y-2">
+          {/* Bars */}
+          {[
+            { label: 'Your order', kcal: totalCalories, color: 'bg-orange-500' },
+            { label: 'Avg meal', kcal: AVG_MEAL_KCAL, color: 'bg-gray-300' },
+            { label: 'Daily goal', kcal: DAILY_GOAL, color: 'bg-gray-200' },
+          ].map(({ label, kcal, color: barColor }) => (
+            <div key={label} className="flex items-center gap-2 text-xs">
+              <span className="w-20 text-gray-600 shrink-0">{label}</span>
+              <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+                <div
+                  className={`h-full rounded-full ${barColor}`}
+                  style={{ width: `${Math.min((kcal / DAILY_GOAL) * 100, 100)}%` }}
+                />
+              </div>
+              <span className="w-16 text-right font-medium text-gray-700">{kcal} kcal</span>
+            </div>
+          ))}
+
+          {/* Message */}
+          <div className={`text-xs p-2 rounded-lg border ${colorMap[color]}`}>
+            {msg}
+            {totalCalories > 0 && (
+              <span className="block text-gray-500 mt-0.5">
+                Your order is {ratio.toFixed(1)}× the average meal
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface CartProps {
   cart: CartItem[];
@@ -16,6 +86,7 @@ interface CartProps {
 export function Cart({ cart, onUpdateQuantity, onPlaceOrder }: CartProps) {
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
 
+  const totalCalories = cart.reduce((sum, item) => sum + (item.calories || 0) * item.quantity, 0);
   const subtotal = cart.reduce((sum, item) => sum + item.discountedPrice * item.quantity, 0);
   const totalSavings = cart
     .filter(item => (item.discountPercent ?? 0) > 0)
@@ -166,6 +237,12 @@ export function Cart({ cart, onUpdateQuantity, onPlaceOrder }: CartProps) {
                                 ${(item.price * item.quantity).toFixed(2)}
                               </p>
                             )}
+                            {item.calories > 0 && (
+                              <p className="text-xs text-gray-400 flex items-center justify-end gap-0.5 mt-0.5">
+                                <Flame className="w-3 h-3 text-orange-400" />
+                                {item.calories * item.quantity} kcal
+                              </p>
+                            )}
                           </div>
                         </div>
 
@@ -271,6 +348,7 @@ export function Cart({ cart, onUpdateQuantity, onPlaceOrder }: CartProps) {
             <span>Total</span>
             <span>${total.toFixed(2)}</span>
           </div>
+          <CaloriePreview totalCalories={totalCalories} />
         </CardContent>
         <CardFooter className="flex-col gap-2 pt-0">
           <Button
