@@ -173,5 +173,5 @@ if __name__ == "__main__":
     print("Press Ctrl+C to stop.\n")
     # Pre-load MobileNet at startup so first request is fast
     get_mobilenet()
-    port = int(os.environ.get("PORT", 8000))
+    port = int(os.environ.get("PORT", 8080))
     uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
