@@ -25,22 +25,31 @@ MOBILENET_PATH = MODEL_DIR / "MobileNet/mobilenet_output/mobilenet_food.onnx"
 YOLO_PATH      = MODEL_DIR / "YoloSmall/train/weights/best.onnx"
 
 def _download(url: str, dest: Path) -> None:
-    """Download a file if it doesn't already exist locally."""
-    if dest.exists():
+    """Download a file, re-downloading if the existing file is too small (corrupt)."""
+    if dest.exists() and dest.stat().st_size > 1_000_000:
+        print(f"  {dest.name} already present ({dest.stat().st_size // 1024 // 1024} MB), skipping download.")
         return
+    if dest.exists():
+        dest.unlink()  # remove corrupt/empty file
     print(f"Downloading {dest.name} from {url} …")
     dest.parent.mkdir(parents=True, exist_ok=True)
     urllib.request.urlretrieve(url, dest)
-    print(f"  → saved {dest}  ({dest.stat().st_size // 1024 // 1024} MB)")
+    size_mb = dest.stat().st_size // 1024 // 1024
+    print(f"  → saved {dest}  ({size_mb} MB)")
 
 # Download models from Supabase Storage on first boot (Railway / cloud).
 # Set MOBILENET_URL and YOLO_URL as environment variables in Railway.
 _mobilenet_url = os.environ.get("MOBILENET_URL")
 _yolo_url      = os.environ.get("YOLO_URL")
+print(f"MOBILENET_URL={'set' if _mobilenet_url else 'NOT SET'}, YOLO_URL={'set' if _yolo_url else 'NOT SET'}")
 if _mobilenet_url:
     _download(_mobilenet_url, MOBILENET_PATH)
+else:
+    print("WARNING: MOBILENET_URL not set — MobileNet model must exist locally")
 if _yolo_url:
     _download(_yolo_url, YOLO_PATH)
+else:
+    print("WARNING: YOLO_URL not set — YOLO model must exist locally")
 
 CLASS_NAMES = [
     "amok", "bai_sach_chrouk", "banana_pancakes", "buddha_bowl", "curry",
