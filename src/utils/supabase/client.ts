@@ -16,6 +16,7 @@ export function userFromSession(session: any) {
     shopId: meta.shop_id as string | undefined,
     campus: meta.campus as string | undefined,
     accessToken: session.access_token as string,
+    telegramVerified: (meta.telegram_verified as boolean) ?? false,
   };
 }
 

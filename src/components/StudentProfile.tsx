@@ -7,12 +7,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Badge } from './ui/badge';
 import { Switch } from './ui/switch';
 import { Alert, AlertDescription } from './ui/alert';
-import { 
-  User, 
-  Mail, 
-  Phone, 
-  CreditCard, 
-  Building2, 
+import {
+  User,
+  Mail,
+  Phone,
+  CreditCard,
+  Building2,
   Wallet,
   Plus,
   Edit,
@@ -22,8 +22,11 @@ import {
   Globe,
   Shield,
   Save,
-  Construction
+  Construction,
+  Send,
+  ExternalLink,
 } from 'lucide-react';
+import { projectId } from '../utils/supabase/info';
 import { supabase } from '../utils/supabase/client';
 import {
   Dialog,
@@ -84,6 +87,65 @@ export function StudentProfile({ user, onUpdateUser }: StudentProfileProps) {
     cardHolder: '',
     expiryDate: '',
   });
+
+  // Telegram verification state
+  const [tgVerified, setTgVerified]       = useState<boolean>(user?.telegramVerified ?? false);
+  const [tgStep, setTgStep]               = useState<'idle' | 'link' | 'otp'>('idle');
+  const [tgOtp, setTgOtp]                 = useState('');
+  const [tgDeepLink, setTgDeepLink]       = useState('');
+  const [tgLoading, setTgLoading]         = useState(false);
+  const [tgError, setTgError]             = useState('');
+
+  const handleRequestTgOtp = async () => {
+    setTgLoading(true);
+    setTgError('');
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/telegram-request-otp`,
+        { method: 'POST', headers: { Authorization: `Bearer ${session!.access_token}` } },
+      );
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed');
+      setTgDeepLink(json.deepLink);
+      setTgStep('link');
+      window.open(json.deepLink, '_blank');
+    } catch (e: any) {
+      setTgError(e.message);
+    } finally {
+      setTgLoading(false);
+    }
+  };
+
+  const handleVerifyTgOtp = async () => {
+    setTgLoading(true);
+    setTgError('');
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/telegram-verify-otp`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${session!.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ otp: tgOtp }),
+        },
+      );
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed');
+      setTgVerified(true);
+      setTgStep('idle');
+      onUpdateUser({ telegramVerified: true });
+      setSuccessMessage('Telegram verified successfully!');
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (e: any) {
+      setTgError(e.message);
+    } finally {
+      setTgLoading(false);
+    }
+  };
 
   // Preferences state
   const [preferences, setPreferences] = useState({
@@ -228,6 +290,88 @@ export function StudentProfile({ user, onUpdateUser }: StudentProfileProps) {
 
         {/* Profile Tab */}
         <TabsContent value="profile" className="space-y-4">
+
+          {/* ── Telegram Verification Card ─────────────────────────────── */}
+          <Card className={tgVerified ? 'border-green-200 bg-green-50' : 'border-orange-200'}>
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Send className="w-4 h-4" />
+                Telegram Verification
+                {tgVerified && (
+                  <Badge className="bg-green-600 text-xs ml-auto">Verified</Badge>
+                )}
+              </CardTitle>
+              <CardDescription>
+                {tgVerified
+                  ? 'Your account is linked to Telegram.'
+                  : 'Verify your account via Telegram — works with any account, no username needed.'}
+              </CardDescription>
+            </CardHeader>
+
+            {!tgVerified && (
+              <CardContent className="space-y-3">
+                {tgError && (
+                  <Alert className="bg-red-50 border-red-200 text-red-900 py-2">
+                    <AlertDescription className="text-sm">{tgError}</AlertDescription>
+                  </Alert>
+                )}
+
+                {tgStep === 'idle' && (
+                  <Button
+                    className="w-full bg-blue-500 hover:bg-blue-600"
+                    onClick={handleRequestTgOtp}
+                    disabled={tgLoading}
+                  >
+                    <Send className="w-4 h-4 mr-2" />
+                    {tgLoading ? 'Opening…' : 'Verify with Telegram'}
+                  </Button>
+                )}
+
+                {tgStep === 'link' && (
+                  <div className="space-y-3">
+                    <p className="text-sm text-gray-700">
+                      1. Tap the button below to open Telegram and press <strong>Start</strong>.<br />
+                      2. You'll receive a 6-digit code in the bot chat.<br />
+                      3. Enter it here.
+                    </p>
+                    <Button
+                      variant="outline"
+                      className="w-full border-blue-300 text-blue-600"
+                      onClick={() => window.open(tgDeepLink, '_blank')}
+                    >
+                      <ExternalLink className="w-4 h-4 mr-2" />
+                      Open @CampusFoodVerifyBot
+                    </Button>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        placeholder="Enter 6-digit code"
+                        value={tgOtp}
+                        onChange={e => { setTgOtp(e.target.value.replace(/\D/g, '')); setTgError(''); }}
+                        className="flex-1 border rounded-md px-3 py-2 text-sm text-center tracking-widest font-mono focus:outline-none focus:ring-2 focus:ring-blue-400"
+                      />
+                      <Button
+                        onClick={handleVerifyTgOtp}
+                        disabled={tgLoading || tgOtp.length !== 6}
+                        className="bg-blue-500 hover:bg-blue-600"
+                      >
+                        {tgLoading ? '…' : 'Confirm'}
+                      </Button>
+                    </div>
+                    <button
+                      className="text-xs text-gray-400 hover:text-gray-600 w-full text-center"
+                      onClick={() => { setTgStep('idle'); setTgOtp(''); setTgError(''); }}
+                    >
+                      Start over
+                    </button>
+                  </div>
+                )}
+              </CardContent>
+            )}
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
