@@ -1708,11 +1708,12 @@ app.get("/make-server-36162e30/admin/users", async (c) => {
       );
       return c.json(users.map((u: any) => ({
         ...u,
+        isActive: u.isActive ?? true,
         telegramVerified: verifiedIds.has(u.id),
       })));
     } catch (_) {
       // If Supabase lookup fails, return users without telegram status
-      return c.json(users);
+      return c.json(users.map((u: any) => ({ ...u, isActive: u.isActive ?? true })));
     }
   } catch (error) {
     console.error('Get users error:', error);
@@ -1724,7 +1725,7 @@ app.get("/make-server-36162e30/admin/users", async (c) => {
 app.get("/make-server-36162e30/admin/shops", async (c) => {
   try {
     const shops = await kv.getByPrefix('shop:');
-    return c.json(shops);
+    return c.json(shops.map((s: any) => ({ ...s, isActive: s.isActive ?? true })));
   } catch (error) {
     console.error('Get shops error:', error);
     return c.json({ error: 'Failed to load shops' }, 500);
