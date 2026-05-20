@@ -396,6 +396,7 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
                         <TableHead>Email</TableHead>
                         <TableHead>Role</TableHead>
                         <TableHead>Status</TableHead>
+                        <TableHead>Telegram</TableHead>
                         <TableHead>Joined</TableHead>
                         <TableHead>Actions</TableHead>
                       </TableRow>
@@ -419,6 +420,11 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
                                 {u.isActive ? 'Active' : 'Inactive'}
                               </span>
                             </div>
+                          </TableCell>
+                          <TableCell>
+                            {u.telegramVerified
+                              ? <Badge className="bg-blue-600 text-xs">✓ Verified</Badge>
+                              : <span className="text-xs text-muted-foreground">—</span>}
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground">
                             {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—'}

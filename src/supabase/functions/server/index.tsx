@@ -1693,7 +1693,27 @@ app.get("/make-server-36162e30/admin/stats", async (c) => {
 app.get("/make-server-36162e30/admin/users", async (c) => {
   try {
     const users = await kv.getByPrefix('user:');
-    return c.json(users);
+
+    // Enrich with telegram_verified from Supabase auth metadata
+    try {
+      const supabase = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+      );
+      const { data: { users: authUsers } } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+      const verifiedIds = new Set(
+        authUsers
+          .filter((u: any) => u.user_metadata?.telegram_verified === true)
+          .map((u: any) => u.id)
+      );
+      return c.json(users.map((u: any) => ({
+        ...u,
+        telegramVerified: verifiedIds.has(u.id),
+      })));
+    } catch (_) {
+      // If Supabase lookup fails, return users without telegram status
+      return c.json(users);
+    }
   } catch (error) {
     console.error('Get users error:', error);
     return c.json({ error: 'Failed to load users' }, 500);
