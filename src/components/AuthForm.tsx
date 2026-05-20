@@ -183,7 +183,7 @@ export function AuthForm({ onAuthSuccess }: AuthFormProps) {
                 {isLoading ? 'Logging in…' : 'Login'}
               </Button>
               <p className="text-xs text-gray-500 text-center">
-                Sellers: use your shop code (A1, B2, IFL-1) · default password: <strong>campus123</strong>
+                Sellers: use your shop code (A1, B1, IFL-NC, IFL-DMC…) · default password: <strong>campus123</strong>
               </p>
             </form>
           </TabsContent>

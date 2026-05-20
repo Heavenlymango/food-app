@@ -22,12 +22,16 @@ export function ShopSettings({ shopId }: ShopSettingsProps) {
   const [description, setDescription] = useState('');
   const [discountPercent, setDiscountPercent] = useState('0');
 
+  const shopFilter = /^[0-9a-f]{8}-[0-9a-f]{4}-/.test(shopId)
+    ? { col: 'id' as const, val: shopId }
+    : { col: 'shop_code' as const, val: shopId };
+
   useEffect(() => { fetchShop(); }, [shopId]);
 
   async function fetchShop() {
     setLoading(true);
     try {
-      const { data, error } = await supabase.from('shops').select('*').eq('shop_code', shopId).single();
+      const { data, error } = await supabase.from('shops').select('*').eq(shopFilter.col, shopFilter.val).single();
       if (error) throw error;
       setShop(data);
       setName(data.name ?? '');
@@ -43,7 +47,7 @@ export function ShopSettings({ shopId }: ShopSettingsProps) {
   async function handleToggleOpen() {
     if (!shop) return;
     const newVal = !(shop.is_active ?? true);
-    const { error } = await supabase.from('shops').update({ is_active: newVal }).eq('shop_code', shopId);
+    const { error } = await supabase.from('shops').update({ is_active: newVal }).eq(shopFilter.col, shopFilter.val);
     if (error) { toast.error('Failed to update'); return; }
     setShop((p: any) => ({ ...p, is_active: newVal }));
     toast.success(newVal ? 'Shop is now OPEN' : 'Shop is now CLOSED');
@@ -57,7 +61,7 @@ export function ShopSettings({ shopId }: ShopSettingsProps) {
         name: name.trim(),
         description: description.trim(),
         discount_percent: parseFloat(discountPercent) || 0,
-      }).eq('shop_code', shopId);
+      }).eq(shopFilter.col, shopFilter.val);
       if (error) throw error;
       setShop((p: any) => ({ ...p, name: name.trim(), description: description.trim(), discount_percent: parseFloat(discountPercent) || 0 }));
       toast.success('Saved!');

@@ -79,7 +79,9 @@ export function MenuManagement({ shopId }: MenuManagementProps) {
   async function resolveShop() {
     setLoading(true);
     try {
-      const { data, error } = await supabase.from('shops').select('id').eq('shop_code', shopId).single();
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-/.test(shopId);
+      const col = isUUID ? 'id' : 'shop_code';
+      const { data, error } = await supabase.from('shops').select('id').eq(col, shopId).single();
       if (error) throw error;
       setShopUuid(data.id);
       await fetchItems(data.id);
