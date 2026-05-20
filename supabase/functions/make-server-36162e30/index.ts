@@ -800,7 +800,7 @@ app.post("/make-server-36162e30/api/orders/place", async (c) => {
     const { data: { user: supaUser }, error: authErr } = await supabase.auth.getUser(jwt);
     if (authErr || !supaUser) return c.json({ error: 'Unauthorized' }, 401);
 
-    const { shopId: shopCode, items, total, estimatedMinutes, scheduledFor } = await c.req.json();
+    const { shopId: shopCode, serviceType, items, total, estimatedMinutes } = await c.req.json();
 
     // Look up shop UUID from shop_code
     const { data: shop, error: shopErr } = await supabase
@@ -817,12 +817,11 @@ app.post("/make-server-36162e30/api/orders/place", async (c) => {
         student_id: supaUser.id,
         shop_id: shop.id,
         total_amount: total,
-        service_type: 'pickup',
+        service_type: serviceType ?? 'pickup',
         status: 'pending',
         estimated_ready_time: estimatedMinutes
           ? new Date(Date.now() + estimatedMinutes * 60000).toISOString()
           : null,
-        scheduled_for: scheduledFor ?? null,
       })
       .select()
       .single();
@@ -851,7 +850,6 @@ app.post("/make-server-36162e30/api/orders/place", async (c) => {
         status: 'pending',
         createdAt: order.ordered_at,
         estimatedMinutes: estimatedMinutes ?? 15,
-        scheduledFor: scheduledFor ?? null,
       }
     });
   } catch (error) {
