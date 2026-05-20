@@ -27,6 +27,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { projectId } from '../utils/supabase/info';
+import { userFromSession } from '../utils/supabase/client';
 import { supabase } from '../utils/supabase/client';
 import {
   Dialog,
@@ -135,9 +136,11 @@ export function StudentProfile({ user, onUpdateUser }: StudentProfileProps) {
       );
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Failed');
+      // Refresh the session so updated metadata (telegram_verified) is in the JWT
+      const { data: { session: fresh } } = await supabase.auth.refreshSession();
       setTgVerified(true);
       setTgStep('idle');
-      onUpdateUser({ telegramVerified: true });
+      onUpdateUser(fresh ? userFromSession(fresh) : { telegramVerified: true });
       setSuccessMessage('Telegram verified successfully!');
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (e: any) {
