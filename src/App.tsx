@@ -172,19 +172,7 @@ export default function App() {
     if (user?.role !== 'student') { toast.error('Only students can place orders'); return; }
     if (cart.length === 0) return;
 
-    // Resolve shop code ('A1', 'IFL-NC', …) → UUID required by orders.shop_id
     const shopCode = cart[0]?.shop;
-    const { data: shopData, error: shopErr } = await supabase
-      .from('shops')
-      .select('id')
-      .eq('shop_code', shopCode)
-      .single();
-
-    if (shopErr || !shopData) {
-      toast.error(`Shop "${shopCode}" not found. Please try again.`);
-      return;
-    }
-
     const total = cart.reduce((sum, item) => sum + item.discountedPrice * item.quantity, 0);
     const estimatedMinutes = calculateEstimatedMinutes(cart);
 
@@ -198,7 +186,7 @@ export default function App() {
             'Authorization': `Bearer ${session.access_token}`,
           },
           body: JSON.stringify({
-            shopId: shopData.id,
+            shopId: shopCode,
             serviceType: orderType,
             items: cart.map(item => ({
               menuItemId: item.id,

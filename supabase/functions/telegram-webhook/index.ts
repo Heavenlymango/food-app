@@ -13,7 +13,27 @@ async function sendMessage(chatId: number, text: string) {
   });
 }
 
+const WEBHOOK_URL = `https://qavwicfoiccfwfntumjj.supabase.co/functions/v1/telegram-webhook`;
+
 serve(async (req) => {
+  const url = new URL(req.url);
+
+  // One-time setup: GET /telegram-webhook?setup=1 registers the webhook with Telegram
+  if (req.method === 'GET' && url.searchParams.get('setup') === '1') {
+    const res = await fetch(
+      `https://api.telegram.org/bot${BOT_TOKEN}/setWebhook`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: WEBHOOK_URL, drop_pending_updates: true }),
+      }
+    );
+    const data = await res.json();
+    return new Response(JSON.stringify(data), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   // Telegram always sends POST; any other method is a health check
   if (req.method !== 'POST') return new Response('OK');
 
