@@ -879,7 +879,7 @@ app.get("/make-server-36162e30/api/seller/orders", async (c) => {
       .from('orders')
       .select(`
         id, student_id, total_amount, status, service_type,
-        ordered_at, estimated_ready_time, cancellation_reason, cancelled_at,
+        ordered_at, estimated_ready_time, scheduled_for, cancellation_reason, cancelled_at,
         order_items (
           id, menu_item_id, quantity, unit_price, item_name,
           menu_items ( description, image_url, category, calories, preparation_time, is_healthy, is_special )
@@ -933,6 +933,7 @@ app.get("/make-server-36162e30/api/seller/orders", async (c) => {
       orderTime: o.ordered_at,
       orderType: o.service_type ?? 'pickup',
       estimatedReadyTime: o.estimated_ready_time ?? null,
+      scheduledFor: o.scheduled_for ?? null,
       cancellationReason: o.cancellation_reason ?? null,
       cancelledAt: o.cancelled_at ?? null,
       isNewCancellation: o.status === 'cancelled' && !viewedCancelledIds.includes(o.id),
