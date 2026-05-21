@@ -276,7 +276,7 @@ export default function App() {
         <FoodScan onAddToCart={addToCart} onClose={() => setShowScan(false)} />
       )}
 
-      <main className="px-4 py-4 max-w-lg mx-auto">
+      <main className="px-4 pt-4 pb-24 max-w-lg mx-auto">
         {activeTab === 'menu' && <MenuBrowser onAddToCart={addToCart} />}
         {activeTab === 'dashboard' && <NutritionDashboard orders={orders} />}
         {activeTab === 'cart' && (
