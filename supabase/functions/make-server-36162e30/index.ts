@@ -800,7 +800,7 @@ app.post("/make-server-36162e30/api/orders/place", async (c) => {
     const { data: { user: supaUser }, error: authErr } = await supabase.auth.getUser(jwt);
     if (authErr || !supaUser) return c.json({ error: 'Unauthorized' }, 401);
 
-    const { shopId: shopCode, serviceType, items, total, estimatedMinutes } = await c.req.json();
+    const { shopId: shopCode, serviceType, items, total, estimatedMinutes, scheduledFor } = await c.req.json();
 
     // Look up shop UUID from shop_code
     const { data: shop, error: shopErr } = await supabase
@@ -810,19 +810,25 @@ app.post("/make-server-36162e30/api/orders/place", async (c) => {
       .single();
     if (shopErr || !shop) return c.json({ error: 'Shop not found' }, 404);
 
+    // Build insert payload — include scheduled_for if provided (reservation feature)
+    const orderPayload: any = {
+      student_id: supaUser.id,
+      shop_id: shop.id,
+      total_amount: total,
+      service_type: serviceType ?? 'pickup',
+      status: 'pending',
+      estimated_ready_time: estimatedMinutes
+        ? new Date(Date.now() + estimatedMinutes * 60000).toISOString()
+        : null,
+    };
+    if (scheduledFor) {
+      try { orderPayload.scheduled_for = new Date(scheduledFor).toISOString(); } catch (_) {}
+    }
+
     // Insert order
     const { data: order, error: orderErr } = await supabase
       .from('orders')
-      .insert({
-        student_id: supaUser.id,
-        shop_id: shop.id,
-        total_amount: total,
-        service_type: serviceType ?? 'pickup',
-        status: 'pending',
-        estimated_ready_time: estimatedMinutes
-          ? new Date(Date.now() + estimatedMinutes * 60000).toISOString()
-          : null,
-      })
+      .insert(orderPayload)
       .select()
       .single();
     if (orderErr || !order) return c.json({ error: 'Failed to create order', detail: orderErr?.message ?? orderErr }, 500);
