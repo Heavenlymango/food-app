@@ -90,6 +90,7 @@ export function Cart({ cart, campus, onUpdateQuantity, onPlaceOrder }: CartProps
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [reserveMode, setReserveMode] = useState(false);
   const [scheduledFor, setScheduledFor] = useState<Date | null>(null);
+  const [customTime, setCustomTime] = useState('');
   const [breaks, setBreaks] = useState<any[]>([]);
   const [loadingBreaks, setLoadingBreaks] = useState(false);
 
@@ -370,44 +371,38 @@ export function Cart({ cart, campus, onUpdateQuantity, onPlaceOrder }: CartProps
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Calendar className="w-4 h-4 text-purple-600" />
-              <span className="text-sm font-medium">Reserve for class break</span>
+              <span className="text-sm font-medium">Schedule for later</span>
             </div>
             <Switch
               checked={reserveMode}
               onCheckedChange={v => {
                 setReserveMode(v);
                 if (v) loadBreaks();
-                else { setScheduledFor(null); }
+                else { setScheduledFor(null); setCustomTime(''); }
               }}
             />
           </div>
           {reserveMode && (
             <div className="mt-3">
               <p className="text-xs text-gray-500 mb-2">
-                Order ready when your break starts — skip the rush-hour queue.
+                Pick a preset class break or set your own time. Works for both pickup and dine-in.
               </p>
               {loadingBreaks ? (
                 <p className="text-xs text-gray-400 py-2 text-center">Loading breaks…</p>
-              ) : upcomingBreaks.length === 0 ? (
-                <p className="text-xs text-gray-400 py-2">
-                  No upcoming breaks today. Place a regular order instead.
-                </p>
               ) : (
                 <div className="flex gap-2 overflow-x-auto pb-1">
                   {upcomingBreaks.map((b, i) => {
                     const start = parseBreakTime(b.break_start);
                     const end = parseBreakTime(b.break_end);
-                    const selected = scheduledFor != null &&
+                    const selected = scheduledFor != null && !customTime &&
                       scheduledFor.getHours() === start.getHours() &&
                       scheduledFor.getMinutes() === start.getMinutes();
                     return (
                       <button
                         key={i}
-                        onClick={() => setScheduledFor(start)}
+                        onClick={() => { setScheduledFor(start); setCustomTime(''); }}
                         className={`flex-shrink-0 px-3 py-2 rounded-xl border text-left text-xs transition-colors ${
-                          selected
-                            ? 'bg-purple-600 border-purple-600 text-white'
-                            : 'border-gray-200 hover:border-purple-300'
+                          selected ? 'bg-purple-600 border-purple-600 text-white' : 'border-gray-200 hover:border-purple-300'
                         }`}
                       >
                         <div className="font-semibold">{b.break_label ?? 'Break'}</div>
@@ -417,11 +412,38 @@ export function Cart({ cart, campus, onUpdateQuantity, onPlaceOrder }: CartProps
                       </button>
                     );
                   })}
+                  {/* Custom time chip */}
+                  <div className={`flex-shrink-0 px-3 py-2 rounded-xl border text-xs transition-colors ${
+                    customTime ? 'bg-purple-600 border-purple-600 text-white' : 'border-dashed border-gray-300 hover:border-purple-300'
+                  }`}>
+                    <div className="font-semibold mb-0.5">Custom</div>
+                    <input
+                      type="time"
+                      value={customTime}
+                      onChange={e => {
+                        setCustomTime(e.target.value);
+                        if (e.target.value) {
+                          const [h, m] = e.target.value.split(':').map(Number);
+                          const d = new Date();
+                          d.setHours(h, m, 0, 0);
+                          setScheduledFor(d);
+                        } else {
+                          setScheduledFor(null);
+                        }
+                      }}
+                      className={`text-xs bg-transparent border-none outline-none w-20 ${customTime ? 'text-white' : 'text-gray-500'}`}
+                    />
+                  </div>
                 </div>
               )}
               {scheduledFor && (
                 <p className="text-xs text-purple-700 font-medium mt-2">
-                  ✓ Pickup reserved at {fmtTime(scheduledFor)}
+                  ✓ Order scheduled for {fmtTime(scheduledFor)}
+                </p>
+              )}
+              {!scheduledFor && (
+                <p className="text-xs text-amber-600 mt-2">
+                  Select a time above to schedule — or place an immediate order below.
                 </p>
               )}
             </div>
@@ -456,36 +478,29 @@ export function Cart({ cart, campus, onUpdateQuantity, onPlaceOrder }: CartProps
           <CaloriePreview totalCalories={totalCalories} />
         </CardContent>
         <CardFooter className="flex-col gap-2 pt-0">
-          {reserveMode && scheduledFor ? (
-            <Button
-              className="w-full bg-purple-600 hover:bg-purple-700"
-              onClick={() => handlePlaceOrder('pickup')}
-              disabled={isPlacingOrder || Object.keys(itemsByShop).length > 1}
-            >
-              <Calendar className="w-4 h-4 mr-2" />
-              Reserve Pickup at {fmtTime(scheduledFor)}
-            </Button>
-          ) : (
-            <>
-              <Button
-                className="w-full"
-                onClick={() => handlePlaceOrder('pickup')}
-                disabled={isPlacingOrder || Object.keys(itemsByShop).length > 1}
-              >
-                <ShoppingBag className="w-4 h-4 mr-2" />
-                Order for Pickup
-              </Button>
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => handlePlaceOrder('dine-in')}
-                disabled={isPlacingOrder || Object.keys(itemsByShop).length > 1}
-              >
-                <Store className="w-4 h-4 mr-2" />
-                Order for Dine-In
-              </Button>
-            </>
-          )}
+          <Button
+            className={`w-full ${reserveMode && scheduledFor ? 'bg-purple-600 hover:bg-purple-700' : ''}`}
+            onClick={() => handlePlaceOrder('pickup')}
+            disabled={isPlacingOrder || Object.keys(itemsByShop).length > 1}
+          >
+            {reserveMode && scheduledFor ? (
+              <><Calendar className="w-4 h-4 mr-2" />Reserve Pickup at {fmtTime(scheduledFor)}</>
+            ) : (
+              <><ShoppingBag className="w-4 h-4 mr-2" />Order for Pickup</>
+            )}
+          </Button>
+          <Button
+            variant="outline"
+            className={`w-full ${reserveMode && scheduledFor ? 'border-purple-400 text-purple-700 hover:bg-purple-50' : ''}`}
+            onClick={() => handlePlaceOrder('dine-in')}
+            disabled={isPlacingOrder || Object.keys(itemsByShop).length > 1}
+          >
+            {reserveMode && scheduledFor ? (
+              <><Calendar className="w-4 h-4 mr-2" />Reserve Dine-In at {fmtTime(scheduledFor)}</>
+            ) : (
+              <><Store className="w-4 h-4 mr-2" />Order for Dine-In</>
+            )}
+          </Button>
         </CardFooter>
       </Card>
     </div>
