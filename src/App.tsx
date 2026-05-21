@@ -166,7 +166,7 @@ export default function App() {
   };
 
   // ── Place order (mirrors Flutter placeOrder) ──────────────────────────────
-  const placeOrder = async (orderType: 'pickup' | 'dine-in') => {
+  const placeOrder = async (orderType: 'pickup' | 'dine-in', scheduledFor?: Date) => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { toast.error('Please log in to place an order'); return; }
     if (user?.role !== 'student') { toast.error('Only students can place orders'); return; }
@@ -196,6 +196,7 @@ export default function App() {
             })),
             total,
             estimatedMinutes,
+            ...(scheduledFor && { scheduledFor: scheduledFor.toISOString() }),
           }),
         }
       );
@@ -279,7 +280,7 @@ export default function App() {
         {activeTab === 'menu' && <MenuBrowser onAddToCart={addToCart} />}
         {activeTab === 'dashboard' && <NutritionDashboard orders={orders} />}
         {activeTab === 'cart' && (
-          <Cart cart={cart} onUpdateQuantity={updateQuantity} onPlaceOrder={placeOrder} />
+          <Cart cart={cart} campus={user.campus ?? 'RUPP'} onUpdateQuantity={updateQuantity} onPlaceOrder={placeOrder} />
         )}
         {activeTab === 'orders' && <OrderTracker orders={orders} studentId={user.id} />}
         {activeTab === 'profile' && (

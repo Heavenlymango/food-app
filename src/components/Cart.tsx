@@ -2,10 +2,12 @@ import { CartItem } from '../App';
 import { Button } from './ui/button';
 import { Card, CardContent, CardFooter, CardHeader } from './ui/card';
 import { Badge } from './ui/badge';
-import { Minus, Plus, Trash2, ShoppingBag, Store, Clock, Flame, ChevronDown, ChevronUp } from 'lucide-react';
+import { Switch } from './ui/switch';
+import { Minus, Plus, Trash2, ShoppingBag, Store, Clock, Flame, ChevronDown, ChevronUp, Calendar } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import { SHOPS } from '../data/menuData';
 import { useState } from 'react';
+import { supabase } from '../utils/supabase/client';
 
 const DAILY_GOAL = 2000;
 const AVG_MEAL_KCAL = 600;
@@ -79,12 +81,46 @@ function CaloriePreview({ totalCalories }: { totalCalories: number }) {
 
 interface CartProps {
   cart: CartItem[];
+  campus: string;
   onUpdateQuantity: (id: string, quantity: number) => void;
-  onPlaceOrder: (orderType: 'pickup' | 'dine-in') => Promise<void>;
+  onPlaceOrder: (orderType: 'pickup' | 'dine-in', scheduledFor?: Date) => Promise<void>;
 }
 
-export function Cart({ cart, onUpdateQuantity, onPlaceOrder }: CartProps) {
+export function Cart({ cart, campus, onUpdateQuantity, onPlaceOrder }: CartProps) {
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  const [reserveMode, setReserveMode] = useState(false);
+  const [scheduledFor, setScheduledFor] = useState<Date | null>(null);
+  const [breaks, setBreaks] = useState<any[]>([]);
+  const [loadingBreaks, setLoadingBreaks] = useState(false);
+
+  const loadBreaks = async () => {
+    setLoadingBreaks(true);
+    try {
+      const dow = new Date().getDay();
+      const { data } = await supabase
+        .from('class_breaks')
+        .select('*')
+        .eq('campus', campus)
+        .eq('day_of_week', dow)
+        .eq('is_active', true)
+        .order('break_start');
+      setBreaks(data ?? []);
+    } finally {
+      setLoadingBreaks(false);
+    }
+  };
+
+  const parseBreakTime = (timeStr: string): Date => {
+    const [h, m] = timeStr.split(':').map(Number);
+    const d = new Date();
+    d.setHours(h, m, 0, 0);
+    return d;
+  };
+
+  const fmtTime = (d: Date) =>
+    d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+  const upcomingBreaks = breaks.filter(b => parseBreakTime(b.break_end) > new Date());
 
   const totalCalories = cart.reduce((sum, item) => sum + (item.calories || 0) * item.quantity, 0);
   const subtotal = cart.reduce((sum, item) => sum + item.discountedPrice * item.quantity, 0);
@@ -141,11 +177,15 @@ export function Cart({ cart, onUpdateQuantity, onPlaceOrder }: CartProps) {
   const estimatedTime = calculateEstimatedTime();
 
   const handlePlaceOrder = async (orderType: 'pickup' | 'dine-in') => {
-    if (isPlacingOrder) return; // Prevent double clicks
-    
+    if (isPlacingOrder) return;
     setIsPlacingOrder(true);
     try {
-      await onPlaceOrder(orderType);
+      await onPlaceOrder(orderType, scheduledFor ?? undefined);
+      if (scheduledFor) {
+        setReserveMode(false);
+        setScheduledFor(null);
+        setBreaks([]);
+      }
     } finally {
       setIsPlacingOrder(false);
     }
@@ -324,6 +364,71 @@ export function Cart({ cart, onUpdateQuantity, onPlaceOrder }: CartProps) {
         </CardContent>
       </Card>
 
+      {/* Reservation Picker */}
+      <Card className={reserveMode ? 'border-purple-300' : ''}>
+        <CardContent className="p-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-purple-600" />
+              <span className="text-sm font-medium">Reserve for class break</span>
+            </div>
+            <Switch
+              checked={reserveMode}
+              onCheckedChange={v => {
+                setReserveMode(v);
+                if (v) loadBreaks();
+                else { setScheduledFor(null); }
+              }}
+            />
+          </div>
+          {reserveMode && (
+            <div className="mt-3">
+              <p className="text-xs text-gray-500 mb-2">
+                Order ready when your break starts — skip the rush-hour queue.
+              </p>
+              {loadingBreaks ? (
+                <p className="text-xs text-gray-400 py-2 text-center">Loading breaks…</p>
+              ) : upcomingBreaks.length === 0 ? (
+                <p className="text-xs text-gray-400 py-2">
+                  No upcoming breaks today. Place a regular order instead.
+                </p>
+              ) : (
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  {upcomingBreaks.map((b, i) => {
+                    const start = parseBreakTime(b.break_start);
+                    const end = parseBreakTime(b.break_end);
+                    const selected = scheduledFor != null &&
+                      scheduledFor.getHours() === start.getHours() &&
+                      scheduledFor.getMinutes() === start.getMinutes();
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => setScheduledFor(start)}
+                        className={`flex-shrink-0 px-3 py-2 rounded-xl border text-left text-xs transition-colors ${
+                          selected
+                            ? 'bg-purple-600 border-purple-600 text-white'
+                            : 'border-gray-200 hover:border-purple-300'
+                        }`}
+                      >
+                        <div className="font-semibold">{b.break_label ?? 'Break'}</div>
+                        <div className={selected ? 'text-purple-200' : 'text-gray-400'}>
+                          {fmtTime(start)} – {fmtTime(end)}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {scheduledFor && (
+                <p className="text-xs text-purple-700 font-medium mt-2">
+                  ✓ Pickup reserved at {fmtTime(scheduledFor)}
+                </p>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Order Summary */}
       <Card>
         <CardHeader className="pb-3">
@@ -351,23 +456,36 @@ export function Cart({ cart, onUpdateQuantity, onPlaceOrder }: CartProps) {
           <CaloriePreview totalCalories={totalCalories} />
         </CardContent>
         <CardFooter className="flex-col gap-2 pt-0">
-          <Button
-            className="w-full"
-            onClick={() => handlePlaceOrder('pickup')}
-            disabled={isPlacingOrder || Object.keys(itemsByShop).length > 1}
-          >
-            <ShoppingBag className="w-4 h-4 mr-2" />
-            Order for Pickup
-          </Button>
-          <Button
-            variant="outline"
-            className="w-full"
-            onClick={() => handlePlaceOrder('dine-in')}
-            disabled={isPlacingOrder || Object.keys(itemsByShop).length > 1}
-          >
-            <Store className="w-4 h-4 mr-2" />
-            Order for Dine-In
-          </Button>
+          {reserveMode && scheduledFor ? (
+            <Button
+              className="w-full bg-purple-600 hover:bg-purple-700"
+              onClick={() => handlePlaceOrder('pickup')}
+              disabled={isPlacingOrder || Object.keys(itemsByShop).length > 1}
+            >
+              <Calendar className="w-4 h-4 mr-2" />
+              Reserve Pickup at {fmtTime(scheduledFor)}
+            </Button>
+          ) : (
+            <>
+              <Button
+                className="w-full"
+                onClick={() => handlePlaceOrder('pickup')}
+                disabled={isPlacingOrder || Object.keys(itemsByShop).length > 1}
+              >
+                <ShoppingBag className="w-4 h-4 mr-2" />
+                Order for Pickup
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => handlePlaceOrder('dine-in')}
+                disabled={isPlacingOrder || Object.keys(itemsByShop).length > 1}
+              >
+                <Store className="w-4 h-4 mr-2" />
+                Order for Dine-In
+              </Button>
+            </>
+          )}
         </CardFooter>
       </Card>
     </div>
