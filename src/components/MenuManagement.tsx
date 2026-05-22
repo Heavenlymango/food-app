@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Leaf, Clock, Tag } from 'lucide-react';
+import { Plus, Edit, Trash2, Leaf, Clock, Tag, AlertTriangle } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
@@ -63,6 +63,7 @@ export function MenuManagement({ shopId }: MenuManagementProps) {
   const [items, setItems] = useState<RawItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [shopUuid, setShopUuid] = useState<string | null>(null);
+  const [shopWideDiscount, setShopWideDiscount] = useState(0);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<RawItem | null>(null);
   const [saving, setSaving] = useState(false);
@@ -81,9 +82,10 @@ export function MenuManagement({ shopId }: MenuManagementProps) {
     try {
       const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-/.test(shopId);
       const col = isUUID ? 'id' : 'shop_code';
-      const { data, error } = await supabase.from('shops').select('id').eq(col, shopId).single();
+      const { data, error } = await supabase.from('shops').select('id, discount_percent').eq(col, shopId).single();
       if (error) throw error;
       setShopUuid(data.id);
+      setShopWideDiscount((data.discount_percent as number) ?? 0);
       await fetchItems(data.id);
     } catch (e: any) {
       toast.error('Could not find shop: ' + e.message);
@@ -98,7 +100,23 @@ export function MenuManagement({ shopId }: MenuManagementProps) {
     try {
       const { data, error } = await supabase.from('menu_items').select('*').eq('shop_id', id).order('name');
       if (error) throw error;
-      setItems(data ?? []);
+      const all = data ?? [];
+      // Deduplicate by name — keep only the first occurrence, delete the rest from DB silently
+      const seenNames = new Set<string>();
+      const unique: RawItem[] = [];
+      const duplicateIds: string[] = [];
+      for (const item of all) {
+        if (seenNames.has(item.name.toLowerCase())) {
+          duplicateIds.push(item.id);
+        } else {
+          seenNames.add(item.name.toLowerCase());
+          unique.push(item);
+        }
+      }
+      if (duplicateIds.length > 0) {
+        await supabase.from('menu_items').delete().in('id', duplicateIds);
+      }
+      setItems(unique);
     } catch (e: any) {
       toast.error('Error loading menu: ' + e.message);
     } finally {
@@ -409,6 +427,16 @@ export function MenuManagement({ shopId }: MenuManagementProps) {
           </DialogContent>
         </Dialog>
       </div>
+
+      {shopWideDiscount > 0 && (
+        <div className="flex items-start gap-2 bg-orange-50 border border-orange-300 rounded-lg px-3 py-2 text-sm">
+          <AlertTriangle className="w-4 h-4 text-orange-500 flex-shrink-0 mt-0.5" />
+          <p className="text-orange-800">
+            <span className="font-semibold">Shop-wide {shopWideDiscount}% discount is active</span> — all items are discounted for students.
+            Go to <span className="font-semibold">Shop Settings</span> tab → "Shop-wide Discount %" and set it to 0 to remove it.
+          </p>
+        </div>
+      )}
 
       {loading ? (
         <div className="text-center py-12 text-gray-400">Loading…</div>
