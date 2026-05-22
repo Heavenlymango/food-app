@@ -875,6 +875,15 @@ app.get("/make-server-36162e30/api/seller/orders", async (c) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
 
+    // Resolve shop_code → UUID (seller metadata may store either)
+    let shopUuid = shopId;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(shopId)) {
+      const { data: shopRow, error: shopErr } = await supabase
+        .from('shops').select('id').eq('shop_code', shopId).single();
+      if (shopErr || !shopRow) return c.json({ error: 'Shop not found' }, 404);
+      shopUuid = shopRow.id;
+    }
+
     const { data: ordersData, error } = await supabase
       .from('orders')
       .select(`
@@ -885,7 +894,7 @@ app.get("/make-server-36162e30/api/seller/orders", async (c) => {
           menu_items ( description, image_url, category, calories, preparation_time, is_healthy, is_special )
         )
       `)
-      .eq('shop_id', shopId)
+      .eq('shop_id', shopUuid)
       .order('ordered_at', { ascending: false })
       .limit(100);
 
@@ -969,6 +978,14 @@ app.post("/make-server-36162e30/api/seller/update-order", async (c) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
 
+    // Resolve shop_code → UUID (seller metadata may store either)
+    let shopUuid = shopId as string | undefined;
+    if (shopUuid && !/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(shopUuid)) {
+      const { data: shopRow } = await supabase
+        .from('shops').select('id').eq('shop_code', shopUuid).single();
+      if (shopRow) shopUuid = shopRow.id;
+    }
+
     // Verify order belongs to this shop
     const { data: order, error: fetchErr } = await supabase
       .from('orders')
@@ -977,7 +994,7 @@ app.post("/make-server-36162e30/api/seller/update-order", async (c) => {
       .single();
 
     if (fetchErr || !order) return c.json({ error: 'Order not found' }, 404);
-    if (order.shop_id !== shopId) return c.json({ error: 'Unauthorized' }, 403);
+    if (shopUuid && order.shop_id !== shopUuid) return c.json({ error: 'Unauthorized' }, 403);
 
     const previousStatus = order.status;
 
