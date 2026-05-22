@@ -800,7 +800,7 @@ app.post("/make-server-36162e30/api/orders/place", async (c) => {
     const { data: { user: supaUser }, error: authErr } = await supabase.auth.getUser(jwt);
     if (authErr || !supaUser) return c.json({ error: 'Unauthorized' }, 401);
 
-    const { shopId: shopCode, items, total, estimatedMinutes, scheduledFor } = await c.req.json();
+    const { shopId: shopCode, serviceType, items, total, estimatedMinutes, scheduledFor } = await c.req.json();
 
     // Look up shop UUID from shop_code
     const { data: shop, error: shopErr } = await supabase
@@ -817,7 +817,7 @@ app.post("/make-server-36162e30/api/orders/place", async (c) => {
         student_id: supaUser.id,
         shop_id: shop.id,
         total_amount: total,
-        service_type: 'pickup',
+        service_type: serviceType ?? 'pickup',
         status: 'pending',
         estimated_ready_time: estimatedMinutes
           ? new Date(Date.now() + estimatedMinutes * 60000).toISOString()
@@ -864,51 +864,99 @@ app.post("/make-server-36162e30/api/orders/place", async (c) => {
 app.get("/make-server-36162e30/api/seller/orders", async (c) => {
   try {
     const shopId = c.req.query('shopId');
-    
-    if (!shopId) {
-      return c.json({ error: 'Shop ID required' }, 400);
+    if (!shopId) return c.json({ error: 'Shop ID required' }, 400);
+
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    );
+
+    // Resolve shop_code → UUID (seller metadata may store either)
+    let shopUuid = shopId;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(shopId)) {
+      const { data: shopRow, error: shopErr } = await supabase
+        .from('shops').select('id').eq('shop_code', shopId).single();
+      if (shopErr || !shopRow) return c.json({ error: 'Shop not found' }, 404);
+      shopUuid = shopRow.id;
     }
 
-    // Get all order IDs for this shop
-    const orderIds = await kv.get(`shop-orders:${shopId}`) || [];
-    
-    // Fetch all orders
-    const orders = await Promise.all(
-      orderIds.map(async (id: string) => await kv.get(`order:${id}`))
-    );
+    const { data: ordersData, error } = await supabase
+      .from('orders')
+      .select(`
+        id, student_id, total_amount, status, service_type,
+        ordered_at, estimated_ready_time, scheduled_for, cancellation_reason, cancelled_at,
+        order_items (
+          id, menu_item_id, quantity, unit_price, item_name,
+          menu_items ( description, image_url, category, calories, preparation_time, is_healthy, is_special )
+        )
+      `)
+      .eq('shop_id', shopUuid)
+      .order('ordered_at', { ascending: false })
+      .limit(100);
 
-    // Filter out null values and sort by time
-    const validOrders = orders.filter(o => o !== null).sort((a: any, b: any) => 
-      new Date(b.orderTime).getTime() - new Date(a.orderTime).getTime()
-    );
+    if (error) return c.json({ error: 'Failed to fetch orders', detail: error.message }, 500);
 
-    // Get viewed cancelled orders for this shop
-    const viewedCancelledIds = await kv.get(`shop-viewed-cancelled:${shopId}`) || [];
+    // Fetch student names via admin auth
+    const studentIds = [...new Set((ordersData ?? []).map((o: any) => o.student_id as string))];
+    const studentNames: Record<string, string> = {};
+    for (const sid of studentIds) {
+      try {
+        const { data: { user } } = await supabase.auth.admin.getUserById(sid);
+        if (user?.user_metadata?.name) {
+          studentNames[sid] = user.user_metadata.name;
+        } else if (user?.email) {
+          studentNames[sid] = user.email.replace(/@(student|seller)\.local$/, '');
+        } else {
+          studentNames[sid] = sid.slice(0, 8).toUpperCase();
+        }
+      } catch { studentNames[sid] = sid.slice(0, 8).toUpperCase(); }
+    }
 
-    // Mark orders as viewed or not
-    const ordersWithViewStatus = validOrders.map((order: any) => ({
-      ...order,
-      isNewCancellation: order.status === 'cancelled' && !viewedCancelledIds.includes(order.id)
+    const viewedCancelledIds: string[] = await kv.get(`shop-viewed-cancelled:${shopUuid}`) || [];
+
+    const orders = (ordersData ?? []).map((o: any) => ({
+      id: o.id,
+      studentId: o.student_id,
+      studentName: studentNames[o.student_id] ?? 'Unknown',
+      items: (o.order_items ?? []).map((oi: any) => ({
+        id: oi.menu_item_id ?? oi.id,
+        name: oi.item_name,
+        description: oi.menu_items?.description ?? '',
+        quantity: oi.quantity,
+        price: oi.unit_price,
+        image: oi.menu_items?.image_url ?? '',
+        category: oi.menu_items?.category ?? '',
+        calories: oi.menu_items?.calories ?? 0,
+        preparationTime: oi.menu_items?.preparation_time ?? 15,
+        isHealthy: oi.menu_items?.is_healthy ?? false,
+        isSpecial: oi.menu_items?.is_special ?? false,
+        shop: shopId,
+      })),
+      total: o.total_amount,
+      status: o.status,
+      orderTime: o.ordered_at,
+      orderType: o.service_type ?? 'pickup',
+      estimatedReadyTime: o.estimated_ready_time ?? null,
+      scheduledFor: o.scheduled_for ?? null,
+      cancellationReason: o.cancellation_reason ?? null,
+      cancelledAt: o.cancelled_at ?? null,
+      isNewCancellation: o.status === 'cancelled' && !viewedCancelledIds.includes(o.id),
     }));
 
-    // Calculate stats
     const today = new Date().toDateString();
-    const todayOrders = ordersWithViewStatus.filter((o: any) => 
-      new Date(o.orderTime).toDateString() === today
-    );
-
+    const todayOrders = orders.filter((o: any) => new Date(o.orderTime).toDateString() === today);
     const stats = {
       today: {
         orders: todayOrders.length,
         revenue: todayOrders
-          .filter((o: any) => o.status === 'completed')
+          .filter((o: any) => o.status !== 'cancelled')
           .reduce((sum: number, o: any) => sum + o.total, 0),
       },
-      pending: ordersWithViewStatus.filter((o: any) => o.status === 'pending').length,
+      pending: orders.filter((o: any) => o.status === 'pending' || o.status === 'preparing').length,
       completed: todayOrders.filter((o: any) => o.status === 'completed').length,
     };
 
-    return c.json({ orders: ordersWithViewStatus, stats });
+    return c.json({ orders, stats });
   } catch (error) {
     console.error('Get seller orders error:', error);
     return c.json({ error: 'Failed to fetch orders' }, 500);
@@ -920,81 +968,63 @@ app.post("/make-server-36162e30/api/seller/update-order", async (c) => {
   try {
     const { orderId, status, shopId, cancellationReason } = await c.req.json();
 
-    const order = await kv.get(`order:${orderId}`);
-    
-    if (!order) {
-      return c.json({ error: 'Order not found' }, 404);
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    );
+
+    // Resolve shop_code → UUID (seller metadata may store either)
+    let shopUuid = shopId as string | undefined;
+    if (shopUuid && !/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(shopUuid)) {
+      const { data: shopRow } = await supabase
+        .from('shops').select('id').eq('shop_code', shopUuid).single();
+      if (shopRow) shopUuid = shopRow.id;
     }
 
-    if (order.shopId !== shopId) {
-      return c.json({ error: 'Unauthorized' }, 403);
-    }
+    // Verify order belongs to this shop
+    const { data: order, error: fetchErr } = await supabase
+      .from('orders')
+      .select('id, student_id, status, shop_id')
+      .eq('id', orderId)
+      .single();
+
+    if (fetchErr || !order) return c.json({ error: 'Order not found' }, 404);
+    if (shopUuid && order.shop_id !== shopUuid) return c.json({ error: 'Unauthorized' }, 403);
 
     const previousStatus = order.status;
-    order.status = status;
-    order.updatedAt = new Date().toISOString();
 
-    // Store cancellation reason if order is being cancelled
+    const updatePayload: any = { status, updated_at: new Date().toISOString() };
     if (status === 'cancelled' && cancellationReason) {
-      order.cancellationReason = cancellationReason;
-      order.cancelledAt = new Date().toISOString();
+      updatePayload.cancellation_reason = cancellationReason;
+      updatePayload.cancelled_at = new Date().toISOString();
+    }
+    if (status === 'ready') updatePayload.ready_at = new Date().toISOString();
+    if (status === 'completed') updatePayload.completed_at = new Date().toISOString();
+
+    const { error: updateErr } = await supabase
+      .from('orders')
+      .update(updatePayload)
+      .eq('id', orderId);
+
+    if (updateErr) return c.json({ error: 'Failed to update order', detail: updateErr.message }, 500);
+
+    // Notify student when order becomes ready or is cancelled
+    if ((status === 'ready' || status === 'cancelled') && previousStatus !== status) {
+      const isReady = status === 'ready';
+      await supabase.from('notifications').insert({
+        user_id: order.student_id,
+        type: 'order_update',
+        title: isReady ? 'Order Ready for Pickup! 🎉' : 'Order Cancelled',
+        message: isReady
+          ? 'Your order is ready for pickup!'
+          : cancellationReason
+            ? `Your order was cancelled. Reason: ${cancellationReason}`
+            : 'Your order was cancelled.',
+        related_order_id: orderId,
+      });
     }
 
-    await kv.set(`order:${orderId}`, order);
-
-    // Create notification when order becomes ready
-    if (status === 'ready' && previousStatus !== 'ready') {
-      const notificationId = `NOTIF-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      const notification = {
-        id: notificationId,
-        studentId: order.studentId,
-        orderId: order.id,
-        type: 'order_ready',
-        title: 'Order Ready for Pickup! 🎉',
-        message: `Your order from ${shopId} is ready for ${order.orderType}`,
-        read: false,
-        createdAt: new Date().toISOString(),
-      };
-
-      await kv.set(`notification:${notificationId}`, notification);
-
-      // Add to student's notification list
-      const studentNotificationsKey = `student-notifications:${order.studentId}`;
-      const studentNotifications = await kv.get(studentNotificationsKey) || [];
-      studentNotifications.unshift(notificationId); // Add to beginning
-      await kv.set(studentNotificationsKey, studentNotifications);
-
-      console.log('Created notification for student:', order.studentId);
-    }
-
-    // Create notification when order is cancelled
-    if (status === 'cancelled' && previousStatus !== 'cancelled') {
-      const notificationId = `NOTIF-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      const notification = {
-        id: notificationId,
-        studentId: order.studentId,
-        orderId: order.id,
-        type: 'order_cancelled',
-        title: 'Order Cancelled',
-        message: cancellationReason 
-          ? `Your order from ${shopId} was cancelled. Reason: ${cancellationReason}`
-          : `Your order from ${shopId} was cancelled`,
-        read: false,
-        createdAt: new Date().toISOString(),
-      };
-
-      await kv.set(`notification:${notificationId}`, notification);
-
-      // Add to student's notification list
-      const studentNotificationsKey = `student-notifications:${order.studentId}`;
-      const studentNotifications = await kv.get(studentNotificationsKey) || [];
-      studentNotifications.unshift(notificationId);
-      await kv.set(studentNotificationsKey, studentNotifications);
-
-      console.log('Created cancellation notification for student:', order.studentId);
-    }
-
-    return c.json({ order });
+    return c.json({ success: true });
   } catch (error) {
     console.error('Update order error:', error);
     return c.json({ error: 'Failed to update order' }, 500);
