@@ -882,19 +882,27 @@ app.get("/make-server-36162e30/api/seller/orders", async (c) => {
 
     const { data: ordersData, error } = await supabase
       .from('orders')
-      .select(`
-        id, student_id, total_amount, status, service_type,
-        ordered_at, estimated_ready_time, scheduled_for, cancellation_reason, cancelled_at,
-        order_items (
-          id, menu_item_id, quantity, unit_price, item_name,
-          menu_items ( description, image_url, category, calories, preparation_time, is_healthy, is_special )
-        )
-      `)
+      .select('id, student_id, total_amount, status, service_type, ordered_at, estimated_ready_time, scheduled_for, cancellation_reason, cancelled_at')
       .eq('shop_id', shopUuid)
       .order('ordered_at', { ascending: false })
       .limit(100);
 
     if (error) return c.json({ error: 'Failed to fetch orders', detail: error.message }, 500);
+
+    // Fetch order items separately (avoids FK join dependency)
+    const orderIds = (ordersData ?? []).map((o: any) => o.id as string);
+    const { data: allItems } = orderIds.length
+      ? await supabase
+          .from('order_items')
+          .select('order_id, id, menu_item_id, quantity, unit_price, item_name, menu_items(description, image_url, category, calories, preparation_time, is_healthy, is_special)')
+          .in('order_id', orderIds)
+      : { data: [] };
+
+    const itemsByOrder: Record<string, any[]> = {};
+    for (const item of allItems ?? []) {
+      if (!itemsByOrder[item.order_id]) itemsByOrder[item.order_id] = [];
+      itemsByOrder[item.order_id].push(item);
+    }
 
     // Fetch student names via admin auth
     const studentIds = [...new Set((ordersData ?? []).map((o: any) => o.student_id as string))];
@@ -918,7 +926,7 @@ app.get("/make-server-36162e30/api/seller/orders", async (c) => {
       id: o.id,
       studentId: o.student_id,
       studentName: studentNames[o.student_id] ?? 'Unknown',
-      items: (o.order_items ?? []).map((oi: any) => ({
+      items: (itemsByOrder[o.id] ?? []).map((oi: any) => ({
         id: oi.menu_item_id ?? oi.id,
         name: oi.item_name,
         description: oi.menu_items?.description ?? '',

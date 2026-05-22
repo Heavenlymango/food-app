@@ -95,16 +95,31 @@ export default function App() {
 
     const { data, error } = await supabase
       .from('orders')
-      .select('*, shops!inner(shop_code, name), order_items(*, menu_items(calories))')
+      .select('*, shops!inner(shop_code, name)')
       .eq('student_id', session.user.id)
       .order('ordered_at', { ascending: false })
       .limit(50);
 
     if (error || !data) return;
 
+    // Fetch order items separately to avoid FK join dependency / RLS issues
+    const orderIds = data.map((o: any) => o.id as string);
+    const { data: allItems } = orderIds.length
+      ? await supabase
+          .from('order_items')
+          .select('order_id, id, menu_item_id, item_name, unit_price, quantity, menu_items(calories)')
+          .in('order_id', orderIds)
+      : { data: [] };
+
+    const itemsByOrder: Record<string, any[]> = {};
+    for (const item of allItems ?? []) {
+      if (!itemsByOrder[item.order_id]) itemsByOrder[item.order_id] = [];
+      itemsByOrder[item.order_id].push(item);
+    }
+
     const mapped: Order[] = data.map((o: any) => ({
       id: o.id,
-      items: (o.order_items ?? []).map((oi: any) => ({
+      items: (itemsByOrder[o.id] ?? []).map((oi: any) => ({
         id: oi.menu_item_id ?? oi.id ?? '',
         name: oi.item_name,
         description: '',

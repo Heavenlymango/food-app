@@ -15,7 +15,7 @@ interface OrderTrackerProps {
 export function OrderTracker({ orders, studentId }: OrderTrackerProps) {
   // Calculate if an order is late
   const calculateLateTime = (order: Order) => {
-    if (order.status === 'completed' || order.status === 'ready') {
+    if (order.status === 'completed' || order.status === 'ready' || order.status === 'cancelled') {
       return null;
     }
 
@@ -33,7 +33,7 @@ export function OrderTracker({ orders, studentId }: OrderTrackerProps) {
 
   // Calculate time remaining until ready
   const calculateTimeRemaining = (order: Order) => {
-    if (order.status === 'completed' || order.status === 'ready') {
+    if (order.status === 'completed' || order.status === 'ready' || order.status === 'cancelled') {
       return null;
     }
 
@@ -130,6 +130,15 @@ export function OrderTracker({ orders, studentId }: OrderTrackerProps) {
         // Status display configuration
         const getStatusDisplay = () => {
           switch (order.status) {
+            case 'pending':
+              return {
+                label: 'Pending Acceptance',
+                color: 'bg-yellow-100 text-yellow-800 border-yellow-300',
+                icon: Clock,
+                iconColor: 'text-yellow-600',
+                borderColor: 'border-yellow-200',
+                bgColor: '',
+              };
             case 'preparing':
               return {
                 label: 'Being Prepared',
@@ -156,6 +165,15 @@ export function OrderTracker({ orders, studentId }: OrderTrackerProps) {
                 iconColor: 'text-gray-500',
                 borderColor: 'border-gray-200',
                 bgColor: '',
+              };
+            case 'cancelled':
+              return {
+                label: 'Cancelled',
+                color: 'bg-red-100 text-red-800 border-red-300',
+                icon: XCircle,
+                iconColor: 'text-red-500',
+                borderColor: 'border-red-200',
+                bgColor: 'bg-red-50',
               };
             default:
               return {
