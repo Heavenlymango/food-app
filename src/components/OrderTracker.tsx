@@ -1,7 +1,7 @@
 import { Order } from '../App';
 import { Card, CardContent, CardHeader } from './ui/card';
 import { Badge } from './ui/badge';
-import { Clock, CheckCircle2, ShoppingBag, Store, AlertTriangle, XCircle, Leaf } from 'lucide-react';
+import { Clock, CheckCircle2, ShoppingBag, Store, AlertTriangle, XCircle, Leaf, Calendar } from 'lucide-react';
 import { format, formatDistance } from 'date-fns';
 import { CancelOrderDialog } from './CancelOrderDialog';
 import { OrderChatDialog } from './OrderChatDialog';
@@ -237,6 +237,19 @@ export function OrderTracker({ orders, studentId }: OrderTrackerProps) {
                   <p className="text-xl text-orange-600">${order.total.toFixed(2)}</p>
                 </div>
               </div>
+
+              {/* Reservation banner */}
+              {order.scheduledFor && (
+                <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2 mt-2">
+                  <Calendar className="h-4 w-4 text-indigo-600 flex-shrink-0" />
+                  <div>
+                    <p className="text-xs font-semibold text-indigo-800">Scheduled / Reservation</p>
+                    <p className="text-sm font-bold text-indigo-700">
+                      {format(order.scheduledFor, 'EEE, MMM d · h:mm a')}
+                    </p>
+                  </div>
+                </div>
+              )}
             </CardHeader>
 
             <CardContent className="space-y-3">

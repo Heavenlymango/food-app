@@ -14,7 +14,8 @@ import {
   Bell,
   LogOut,
   UtensilsCrossed,
-  Settings as SettingsIcon
+  Settings as SettingsIcon,
+  Calendar,
 } from 'lucide-react';
 import { CancelOrderDialog } from './CancelOrderDialog';
 import { OrderChatDialog } from './OrderChatDialog';
@@ -47,6 +48,7 @@ interface Order {
   status: 'pending' | 'preparing' | 'ready' | 'completed' | 'cancelled';
   orderTime: string;
   orderType: 'pickup' | 'dine-in';
+  scheduledFor?: string | null;
   estimatedReadyTime?: string;
   cancellationReason?: string;
   cancelledAt?: string;
@@ -587,6 +589,15 @@ function OrderCard({
             <Badge variant="outline" className="text-xs">
               {order.orderType === 'pickup' ? '🥡 Pickup' : '🍽️ Dine-in'}
             </Badge>
+            {order.scheduledFor && (
+              <Badge className="bg-indigo-600 text-white text-xs gap-1 flex items-center">
+                <Calendar className="h-3 w-3" />
+                Reserved: {new Date(order.scheduledFor).toLocaleString('en-US', {
+                  month: 'short', day: 'numeric',
+                  hour: 'numeric', minute: '2-digit', hour12: true,
+                })}
+              </Badge>
+            )}
             {isFromYesterday && (
               <Badge className="bg-purple-600 text-white text-xs">
                 📅 Previous Day Order
@@ -616,6 +627,20 @@ function OrderCard({
 
       {/* Time Information - Enhanced ETA Display */}
       <div className="bg-white border border-gray-200 rounded-lg p-3 mb-3 space-y-2">
+        {order.scheduledFor && (
+          <div className="flex items-center justify-between pb-2 border-b border-indigo-200 bg-indigo-50 -mx-3 -mt-3 px-3 pt-2 rounded-t-lg">
+            <span className="text-sm font-semibold text-indigo-800 flex items-center gap-1">
+              <Calendar className="h-4 w-4" />
+              Scheduled Pickup:
+            </span>
+            <span className="text-sm font-bold text-indigo-700">
+              {new Date(order.scheduledFor).toLocaleString('en-US', {
+                weekday: 'short', month: 'short', day: 'numeric',
+                hour: 'numeric', minute: '2-digit', hour12: true,
+              })}
+            </span>
+          </div>
+        )}
         <div className="flex items-center justify-between">
           <span className="text-sm text-gray-600">Order Placed:</span>
           <span className={`text-sm font-medium ${isFromYesterday && order.status !== 'completed' && order.status !== 'cancelled' ? 'text-red-600' : 'text-gray-900'}`}>

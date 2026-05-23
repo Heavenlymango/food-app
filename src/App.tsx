@@ -56,6 +56,7 @@ export interface Order {
   orderType: 'pickup' | 'dine-in';
   timestamp: Date;
   estimatedReadyTime: Date;
+  scheduledFor?: Date;
 }
 
 export default function App() {
@@ -107,7 +108,7 @@ export default function App() {
     const { data: allItems } = orderIds.length
       ? await supabase
           .from('order_items')
-          .select('order_id, id, menu_item_id, item_name, unit_price, quantity, menu_items(calories)')
+          .select('order_id, id, menu_item_id, item_name, unit_price, quantity, menu_items(calories, is_healthy, is_special)')
           .in('order_id', orderIds)
       : { data: [] };
 
@@ -128,8 +129,8 @@ export default function App() {
         discountedPrice: oi.unit_price,
         category: '',
         calories: (oi.menu_items as any)?.calories ?? 0,
-        isHealthy: false,
-        isSpecial: false,
+        isHealthy: (oi.menu_items as any)?.is_healthy ?? false,
+        isSpecial: (oi.menu_items as any)?.is_special ?? false,
         image: '',
         preparationTime: 15,
         shop: o.shops?.shop_code ?? '',
@@ -142,6 +143,7 @@ export default function App() {
       estimatedReadyTime: o.estimated_ready_time
         ? new Date(o.estimated_ready_time)
         : new Date(Date.now() + 15 * 60000),
+      scheduledFor: o.scheduled_for ? new Date(o.scheduled_for) : undefined,
     }));
 
     setOrders(mapped);
