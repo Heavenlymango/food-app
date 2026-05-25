@@ -1039,22 +1039,66 @@ app.post("/make-server-36162e30/api/seller/update-order", async (c) => {
 // Get Student Orders
 app.get("/make-server-36162e30/api/student/orders", async (c) => {
   try {
-    const studentId = await getUserIdFromToken(c) ?? c.req.query('studentId');
-    if (!studentId) return c.json({ error: 'Unauthorized' }, 401);
+    // Authenticate via Supabase JWT (same as /api/orders/place)
+    const authHeader = c.req.header('Authorization') ?? '';
+    const jwt = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if (!jwt) return c.json({ error: 'Unauthorized' }, 401);
 
-    const studentOrdersKey = `student-orders:${studentId}`;
-    const orderIds = await kv.get(studentOrdersKey) || [];
-    
-    const orders = [];
-    for (const orderId of orderIds) {
-      const order = await kv.get(`order:${orderId}`);
-      if (order) {
-        orders.push(order);
-      }
-    }
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    );
 
-    // Sort by creation time (newest first)
-    orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const { data: { user: supaUser }, error: authErr } = await supabase.auth.getUser(jwt);
+    if (authErr || !supaUser) return c.json({ error: 'Unauthorized' }, 401);
+
+    // Service-role query bypasses RLS so order_items always come back
+    const { data: ordersData, error } = await supabase
+      .from('orders')
+      .select(`
+        id, student_id, total_amount, status, service_type,
+        ordered_at, estimated_ready_time, scheduled_for,
+        cancellation_reason, cancelled_at,
+        shops ( shop_code ),
+        order_items (
+          id, menu_item_id, quantity, unit_price, item_name,
+          menu_items ( calories, is_healthy, is_special )
+        )
+      `)
+      .eq('student_id', supaUser.id)
+      .order('ordered_at', { ascending: false })
+      .limit(50);
+
+    if (error) return c.json({ error: 'Failed to fetch orders', detail: error.message }, 500);
+
+    const orders = (ordersData ?? []).map((o: any) => {
+      const shopCode = o.shops?.shop_code ?? '';
+      return {
+        id: o.id,
+        studentId: o.student_id,
+        studentName: '',
+        shopId: shopCode,
+        items: (o.order_items ?? []).map((oi: any) => ({
+          menuItemId: oi.menu_item_id ?? '',
+          name: oi.item_name,
+          price: oi.unit_price,
+          quantity: oi.quantity,
+          shop: shopCode,
+          calories: oi.menu_items?.calories ?? 0,
+          isHealthy: oi.menu_items?.is_healthy ?? false,
+          isSpecial: oi.menu_items?.is_special ?? false,
+        })),
+        total: o.total_amount,
+        status: o.status,
+        serviceType: o.service_type ?? 'pickup',
+        cancelReason: o.cancellation_reason ?? null,
+        cancelledAt: o.cancelled_at ?? null,
+        createdAt: o.ordered_at,
+        estimatedMinutes: 15,
+        estimatedReadyTime: o.estimated_ready_time ?? null,
+        scheduledFor: o.scheduled_for ?? null,
+      };
+    });
 
     return c.json({ orders });
   } catch (error) {

@@ -17,6 +17,7 @@ import { Toaster } from './components/ui/sonner';
 import { toast } from 'sonner@2.0.3';
 import { supabase, userFromSession } from './utils/supabase/client';
 import { projectId } from './utils/supabase/info';
+import { api } from './utils/api';
 import logo from 'figma:asset/4b19b246aa3bf4bb775a1c4bcd3c068341bc26c6.png';
 
 export interface MenuItem {
@@ -94,56 +95,42 @@ export default function App() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
 
-    const { data, error } = await supabase
-      .from('orders')
-      .select('*, shops!inner(shop_code, name)')
-      .eq('student_id', session.user.id)
-      .order('ordered_at', { ascending: false })
-      .limit(50);
-
-    if (error || !data) return;
-
-    // Fetch order items separately to avoid FK join dependency / RLS issues
-    const orderIds = data.map((o: any) => o.id as string);
-    const { data: allItems } = orderIds.length
-      ? await supabase
-          .from('order_items')
-          .select('order_id, id, menu_item_id, item_name, unit_price, quantity, menu_items(calories, is_healthy, is_special)')
-          .in('order_id', orderIds)
-      : { data: [] };
-
-    const itemsByOrder: Record<string, any[]> = {};
-    for (const item of allItems ?? []) {
-      if (!itemsByOrder[item.order_id]) itemsByOrder[item.order_id] = [];
-      itemsByOrder[item.order_id].push(item);
+    // Route through Edge Function (service role) so order_items are not
+    // blocked by RLS — same pattern as seller orders.
+    let data: { orders?: any[] };
+    try {
+      data = await api.get('/api/student/orders');
+    } catch (err) {
+      console.error('Failed to fetch student orders:', err);
+      return;
     }
 
-    const mapped: Order[] = data.map((o: any) => ({
+    const mapped: Order[] = (data.orders ?? []).map((o: any) => ({
       id: o.id,
-      items: (itemsByOrder[o.id] ?? []).map((oi: any) => ({
-        id: oi.menu_item_id ?? oi.id ?? '',
-        name: oi.item_name,
+      items: (o.items ?? []).map((oi: any) => ({
+        id: oi.menuItemId ?? '',
+        name: oi.name,
         description: '',
-        price: oi.unit_price,
+        price: oi.price,
         discountPercent: 0,
-        discountedPrice: oi.unit_price,
+        discountedPrice: oi.price,
         category: '',
-        calories: (oi.menu_items as any)?.calories ?? 0,
-        isHealthy: (oi.menu_items as any)?.is_healthy ?? false,
-        isSpecial: (oi.menu_items as any)?.is_special ?? false,
+        calories: oi.calories ?? 0,
+        isHealthy: oi.isHealthy ?? false,
+        isSpecial: oi.isSpecial ?? false,
         image: '',
         preparationTime: 15,
-        shop: o.shops?.shop_code ?? '',
+        shop: oi.shop ?? o.shopId ?? '',
         quantity: oi.quantity,
       })),
-      total: o.total_amount,
+      total: o.total,
       status: o.status,
-      orderType: o.service_type ?? 'pickup',
-      timestamp: new Date(o.ordered_at),
-      estimatedReadyTime: o.estimated_ready_time
-        ? new Date(o.estimated_ready_time)
+      orderType: o.serviceType ?? 'pickup',
+      timestamp: new Date(o.createdAt),
+      estimatedReadyTime: o.estimatedReadyTime
+        ? new Date(o.estimatedReadyTime)
         : new Date(Date.now() + 15 * 60000),
-      scheduledFor: o.scheduled_for ? new Date(o.scheduled_for) : undefined,
+      scheduledFor: o.scheduledFor ? new Date(o.scheduledFor) : undefined,
     }));
 
     setOrders(mapped);
