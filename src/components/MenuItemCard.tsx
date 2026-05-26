@@ -3,8 +3,10 @@ import { ImageWithFallback } from './figma/ImageWithFallback';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Card } from './ui/card';
-import { Plus, Clock, Flame, Leaf, CheckCircle2 } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { Plus, Clock, Flame, Leaf, CheckCircle2, AlertTriangle, Info } from 'lucide-react';
 import { useState } from 'react';
+import { classifyItem, badgeFor } from '../utils/healthClassification';
 
 interface MenuItemCardProps {
   item: MenuItem;
@@ -15,6 +17,15 @@ export function MenuItemCard({ item, onAddToCart }: MenuItemCardProps) {
   const [added, setAdded] = useState(false);
   const displayPrice = item.discountedPrice ?? item.price;
   const hasDiscount = (item.discountPercent ?? 0) > 0;
+
+  const classification = classifyItem({
+    name: item.name,
+    category: item.category,
+    calories: item.calories,
+    isHealthy: item.isHealthy,
+  });
+  const badge = badgeFor(classification.status);
+  const isWarning = classification.status === 'unhealthy' || classification.status === 'caution';
 
   const handleAdd = () => {
     onAddToCart(item);
@@ -41,7 +52,53 @@ export function MenuItemCard({ item, onAddToCart }: MenuItemCardProps) {
             <div className="flex-1 min-w-0">
               <h3 className="text-sm font-semibold line-clamp-1">{item.name}</h3>
               <p className="text-xs text-gray-500 line-clamp-1">{item.description}</p>
-              <Badge variant="outline" className="text-xs mt-1 px-1.5 py-0">{item.shop}</Badge>
+              <div className="flex gap-1 mt-1 flex-wrap items-center">
+                <Badge variant="outline" className="text-xs px-1.5 py-0">{item.shop}</Badge>
+                {badge && isWarning && (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 rounded-md bg-orange-100 text-orange-700 border border-orange-300 px-1.5 py-0 text-[10px] font-semibold hover:bg-orange-200 transition-colors"
+                        aria-label={`Why this item is ${badge.label.toLowerCase()}`}
+                      >
+                        <AlertTriangle className="w-2.5 h-2.5" />
+                        {badge.label}
+                        <Info className="w-2.5 h-2.5 opacity-70" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80 text-xs" side="top">
+                      <p className="font-semibold text-sm mb-2 text-gray-900">
+                        Why this is flagged
+                      </p>
+                      <ul className="space-y-2">
+                        {classification.reasons.map(r => (
+                          <li key={r.id} className="border-l-2 border-orange-400 pl-2">
+                            <p className="font-medium text-gray-800">{r.label}</p>
+                            <p className="text-gray-600 mt-0.5">{r.reason}</p>
+                            <p className="text-[10px] text-gray-400 mt-1">
+                              Sources: {r.sources.map((s, i) => (
+                                <span key={s.url}>
+                                  <a
+                                    href={s.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-orange-600 hover:underline"
+                                  >{s.short}</a>
+                                  {i < r.sources.length - 1 ? ', ' : ''}
+                                </span>
+                              ))}
+                            </p>
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="text-[10px] text-gray-400 mt-3 border-t pt-2">
+                        See the FAQ for the full rule set and references.
+                      </p>
+                    </PopoverContent>
+                  </Popover>
+                )}
+              </div>
             </div>
             {item.isHealthy && <Leaf className="w-4 h-4 text-green-500 flex-shrink-0" />}
           </div>

@@ -17,12 +17,15 @@ import {
   Settings as SettingsIcon,
   Calendar,
   BarChart2,
+  HelpCircle,
+  X as XIcon,
 } from 'lucide-react';
 import { CancelOrderDialog } from './CancelOrderDialog';
 import { OrderChatDialog } from './OrderChatDialog';
 import { MenuManagement } from './MenuManagement';
 import { ShopSettings } from './ShopSettings';
 import { SellerAnalytics } from './SellerAnalytics';
+import { FAQ } from './FAQ';
 import { MessageNotificationMonitor } from './MessageNotificationMonitor';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import { api } from '../utils/api';
@@ -75,6 +78,7 @@ export function SellerDashboard({ user, onLogout }: SellerDashboardProps) {
     completed: 0,
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [showFAQ, setShowFAQ] = useState(false);
 
   useEffect(() => {
     fetchOrders();
@@ -208,16 +212,38 @@ export function SellerDashboard({ user, onLogout }: SellerDashboardProps) {
               <p className="text-orange-100 text-sm">Shop {user.shopId} - Seller Dashboard</p>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            onClick={onLogout}
-            className="text-white hover:bg-orange-700"
-          >
-            <LogOut className="h-5 w-5 mr-2" />
-            Logout
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              onClick={() => setShowFAQ(true)}
+              className="text-white hover:bg-orange-700"
+              aria-label="Open FAQ"
+            >
+              <HelpCircle className="h-5 w-5" />
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={onLogout}
+              className="text-white hover:bg-orange-700"
+            >
+              <LogOut className="h-5 w-5 mr-2" />
+              Logout
+            </Button>
+          </div>
         </div>
       </div>
+
+      {showFAQ && (
+        <div className="fixed inset-0 z-[100] bg-white overflow-y-auto">
+          <div className="sticky top-0 bg-white border-b z-10 px-4 py-3 flex items-center justify-between">
+            <h2 className="font-semibold">FAQ &amp; References</h2>
+            <Button variant="ghost" size="sm" onClick={() => setShowFAQ(false)} aria-label="Close FAQ">
+              <XIcon className="w-5 h-5" />
+            </Button>
+          </div>
+          <FAQ />
+        </div>
+      )}
 
       <div className="max-w-7xl mx-auto p-4 space-y-6">
         {/* Main Navigation Tabs */}

@@ -10,7 +10,8 @@ import { SellerDashboard } from './components/SellerDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
 import { NotificationBell } from './components/NotificationBell';
 import { MessageNotificationMonitor } from './components/MessageNotificationMonitor';
-import { UtensilsCrossed, ShoppingCart, Receipt, BarChart2, User, LogOut, ScanLine } from 'lucide-react';
+import { FAQ } from './components/FAQ';
+import { UtensilsCrossed, ShoppingCart, Receipt, BarChart2, User, LogOut, ScanLine, HelpCircle, X as XIcon } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Badge } from './components/ui/badge';
 import { Toaster } from './components/ui/sonner';
@@ -67,6 +68,7 @@ export default function App() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [showScan, setShowScan] = useState(false);
+  const [showFAQ, setShowFAQ] = useState(false);
 
   // ── Auth via Supabase (mirrors Flutter AuthProvider) ──────────────────────
   useEffect(() => {
@@ -260,6 +262,15 @@ export default function App() {
                 <span className="text-xs font-medium">Scan</span>
               </Button>
             )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowFAQ(true)}
+              className="text-gray-600 hover:text-orange-600"
+              aria-label="Open FAQ"
+            >
+              <HelpCircle className="w-5 h-5" />
+            </Button>
             <NotificationBell
               studentId={user.id}
               onNotificationClick={() => setActiveTab('orders')}
@@ -278,6 +289,23 @@ export default function App() {
 
       {showScan && (
         <FoodScan onAddToCart={addToCart} onClose={() => setShowScan(false)} />
+      )}
+
+      {showFAQ && (
+        <div className="fixed inset-0 z-[100] bg-white overflow-y-auto">
+          <div className="sticky top-0 bg-white border-b z-10 px-4 py-3 flex items-center justify-between">
+            <h2 className="font-semibold">FAQ &amp; References</h2>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowFAQ(false)}
+              aria-label="Close FAQ"
+            >
+              <XIcon className="w-5 h-5" />
+            </Button>
+          </div>
+          <FAQ />
+        </div>
       )}
 
       <main className="px-4 pt-4 pb-24 max-w-lg mx-auto">
