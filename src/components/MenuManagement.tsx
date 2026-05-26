@@ -33,7 +33,7 @@ interface RawItem {
   is_available: boolean | null;
 }
 
-interface DiscountSchedule {
+interface PromotionScheme {
   id: string;
   label: string;
   discount_percent: number;
@@ -69,8 +69,8 @@ export function MenuManagement({ shopId }: MenuManagementProps) {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
 
-  // per-item discount schedules
-  const [schedules, setSchedules] = useState<DiscountSchedule[]>([]);
+  // per-item promotion schemes
+  const [schedules, setSchedules] = useState<PromotionScheme[]>([]);
   const [scheduleForm, setScheduleForm] = useState(EMPTY_SCHEDULE);
   const [showScheduleForm, setShowScheduleForm] = useState(false);
   const [savingSchedule, setSavingSchedule] = useState(false);
@@ -157,7 +157,7 @@ export function MenuManagement({ shopId }: MenuManagementProps) {
       .select('*')
       .eq('menu_item_id', itemId)
       .order('created_at', { ascending: false });
-    setSchedules((data ?? []) as DiscountSchedule[]);
+    setSchedules((data ?? []) as PromotionScheme[]);
   }
 
   async function handleAddSchedule() {
@@ -178,7 +178,7 @@ export function MenuManagement({ shopId }: MenuManagementProps) {
         is_active: true,
       });
       if (error) throw error;
-      toast.success('Schedule added!');
+      toast.success('Promotion scheme added!');
       setShowScheduleForm(false);
       setScheduleForm(EMPTY_SCHEDULE);
       await fetchSchedules(editingItem.id);
@@ -330,12 +330,12 @@ export function MenuManagement({ shopId }: MenuManagementProps) {
               </DialogFooter>
             </form>
 
-            {/* Discount schedules — only when editing an existing item */}
+            {/* Promotion schemes — only when editing an existing item */}
             {editingItem && (
               <div className="mt-4 border-t pt-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 font-semibold text-sm">
-                    <Tag className="w-4 h-4 text-orange-500" /> Discount Schedules
+                    <Tag className="w-4 h-4 text-orange-500" /> Promotion Schemes
                   </div>
                   <Button size="sm" variant="outline" onClick={() => setShowScheduleForm(v => !v)}>
                     <Plus className="w-3 h-3 mr-1" /> Add
@@ -388,14 +388,14 @@ export function MenuManagement({ shopId }: MenuManagementProps) {
                       <Button size="sm" variant="outline" onClick={() => setShowScheduleForm(false)} className="flex-1">Cancel</Button>
                       <Button size="sm" disabled={savingSchedule} onClick={handleAddSchedule}
                         className="flex-1 bg-orange-600 hover:bg-orange-700">
-                        {savingSchedule ? 'Saving…' : 'Save Schedule'}
+                        {savingSchedule ? 'Saving…' : 'Save Promotion'}
                       </Button>
                     </div>
                   </div>
                 )}
 
                 {schedules.length === 0 && !showScheduleForm && (
-                  <p className="text-xs text-gray-400">No schedules yet.</p>
+                  <p className="text-xs text-gray-400">No promotion schemes yet.</p>
                 )}
 
                 {schedules.map(s => {

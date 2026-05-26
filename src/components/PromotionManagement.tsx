@@ -79,7 +79,7 @@ export function PromotionManagement({ shopId }: PromotionManagementProps) {
         is_active: true,
       });
       if (error) throw error;
-      toast.success('Discount schedule added!');
+      toast.success('Promotion scheme added!');
       setIsDialogOpen(false);
       setForm(EMPTY_FORM);
       fetchSchedules();
@@ -98,7 +98,7 @@ export function PromotionManagement({ shopId }: PromotionManagementProps) {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('Delete this discount schedule?')) return;
+    if (!confirm('Delete this promotion scheme?')) return;
     await supabase.from('item_discount_schedules').delete().eq('id', id);
     toast.success('Deleted');
     setSchedules(prev => prev.filter(s => s.id !== id));
@@ -130,17 +130,17 @@ export function PromotionManagement({ shopId }: PromotionManagementProps) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold">Time-based Discounts</h2>
-          <p className="text-sm text-gray-500">Schedule limited-time deals per menu item</p>
+          <h2 className="text-xl font-bold">Promotion Schemes</h2>
+          <p className="text-sm text-gray-500">Time-based promotion schemes per menu item</p>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={open => { setIsDialogOpen(open); if (!open) setForm(EMPTY_FORM); }}>
           <DialogTrigger asChild>
             <Button className="bg-orange-600 hover:bg-orange-700">
-              <Plus className="w-4 h-4 mr-2" />Add Discount
+              <Plus className="w-4 h-4 mr-2" />Add Promotion
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-md">
-            <DialogHeader><DialogTitle>Add Discount Window</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>Add Promotion Scheme</DialogTitle></DialogHeader>
             <form onSubmit={handleAdd} className="space-y-4">
               <div className="space-y-2">
                 <Label>Menu Item *</Label>
@@ -190,7 +190,7 @@ export function PromotionManagement({ shopId }: PromotionManagementProps) {
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
                 <Button type="submit" disabled={saving} className="bg-orange-600 hover:bg-orange-700">
-                  {saving ? 'Saving…' : 'Add Discount'}
+                  {saving ? 'Saving…' : 'Add Promotion'}
                 </Button>
               </DialogFooter>
             </form>
@@ -203,7 +203,7 @@ export function PromotionManagement({ shopId }: PromotionManagementProps) {
       ) : schedules.length === 0 ? (
         <Card className="p-12 text-center text-gray-400">
           <Tag className="w-12 h-12 mx-auto mb-2 opacity-20" />
-          <p>No discount schedules yet.</p>
+          <p>No promotion schemes yet.</p>
           <p className="text-sm mt-1">Add one to offer time-limited deals on menu items.</p>
         </Card>
       ) : (
