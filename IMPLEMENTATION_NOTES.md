@@ -4,6 +4,14 @@ A single page you can read top-to-bottom to remember what we built, why,
 where it lives in the code, and what (if anything) still needs to be
 deployed manually.
 
+> **Web ↔ Flutter parity (added 2026-05-26):** every UI feature below
+> exists in **both** repos. Specifically: the classifier
+> (`lib/utils/health_classification.dart`), the orange Unhealthy chip on
+> menu cards, the full FAQ screen with paper citations and 80% rationale,
+> the seller analytics tab, the rebuilt student nutrition dashboard, the
+> Discount → Promotion rename, the 17 unit tests, and the CI test gate.
+> Section 12 lists the Flutter-specific file paths.
+
 Two repos in scope:
 - **Web app** — `food_app/` → github.com/Heavenlymango/food-app
 - **Flutter APK** — `food_app1_flutter/` → github.com/Heavenlymango/Food-app-apk
@@ -334,6 +342,53 @@ See `food_app/CI_CD_GUIDE.md` for three concrete demo flows.
 
 ---
 
+## 12. Flutter parity (2026-05-26)
+
+Every UI feature was ported to the Flutter app so mobile and web stay in
+lockstep. New / changed Flutter files:
+
+| Web file | Flutter equivalent |
+| --- | --- |
+| `food_app/src/utils/healthClassification.ts` | `food_app1_flutter/lib/utils/health_classification.dart` |
+| `food_app/src/utils/healthClassification.test.ts` | `food_app1_flutter/test/health_classification_test.dart` |
+| `food_app/src/components/FAQ.tsx` | `food_app1_flutter/lib/screens/faq/faq_screen.dart` |
+| `food_app/src/components/MenuItemCard.tsx` (badge + popover) | `food_app1_flutter/lib/widgets/menu_item_card.dart` (badge + bottom sheet) |
+| `food_app/src/components/NutritionDashboard.tsx` | `food_app1_flutter/lib/screens/dashboard/dashboard_screen.dart` |
+| `food_app/src/components/SellerAnalytics.tsx` | `food_app1_flutter/lib/screens/seller/seller_dashboard_screen.dart` (new 4th tab `_AnalyticsTab`) |
+| `food_app/.github/workflows/deploy.yml` (test step) | `food_app1_flutter/.github/workflows/ci.yml` (analyze + test) |
+
+### Flutter-specific deps added
+- `url_launcher ^6.2.0` — open FAQ source links in the system browser.
+- `fl_chart ^0.68.0` — bar charts and pie charts for both dashboards.
+
+### Flutter wiring
+- **Drawer entry** for the student FAQ — `home_screen.dart` adds a "FAQ &
+  References" `ListTile` with an explanatory subtitle.
+- **Seller FAQ button** — the seller dashboard's AppBar gains a
+  `help_outline` icon next to logout that pushes the FAQ screen.
+- **Order item model unchanged** — calories used in the dashboard come
+  from `MenuProvider.allItems` lookup (same as before). The Edge
+  Function returns `calories` and `isHealthy` per item but the Flutter
+  client still uses the menu lookup as the source of truth, so no model
+  migration was needed.
+
+### Flutter CI test gate
+`food_app1_flutter/.github/workflows/ci.yml` now runs `flutter analyze`
+**and** `flutter test` in the `analyze` job. Because `build-apk` declares
+`needs: analyze`, a failing test blocks the APK build — same gating
+pattern as the web pipeline.
+
+### Verification commands
+Reproduce the same checks the CI runs:
+```bash
+cd food_app1_flutter
+flutter pub get
+flutter analyze --no-fatal-infos   # static analysis
+flutter test                       # 17 unit tests
+```
+
+---
+
 ## Commits this push corresponds to (food-app repo)
 
 | SHA | Message |
@@ -344,5 +399,7 @@ See `food_app/CI_CD_GUIDE.md` for three concrete demo flows.
 | `8139a63` | Rename 'discount schedule' to 'promotion scheme' in UI |
 | `0a1d258` | Add seller analytics tab and rebuild student nutrition dashboard |
 | `80478a6` | Add unhealthy badge, paper-cited FAQ, vitest, and CI test gate |
+| `e23fef9` | Add IMPLEMENTATION_NOTES — single-page changelog for May 2026 work |
+| `4087de3` *(Flutter repo)* | Flutter parity: unhealthy badge, FAQ, rebuilt dashboards, tests, CI gate |
 
 Pull either repo and check `git log` to see the full diffs.
