@@ -16,11 +16,13 @@ import {
   UtensilsCrossed,
   Settings as SettingsIcon,
   Calendar,
+  BarChart2,
 } from 'lucide-react';
 import { CancelOrderDialog } from './CancelOrderDialog';
 import { OrderChatDialog } from './OrderChatDialog';
 import { MenuManagement } from './MenuManagement';
 import { ShopSettings } from './ShopSettings';
+import { SellerAnalytics } from './SellerAnalytics';
 import { MessageNotificationMonitor } from './MessageNotificationMonitor';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import { api } from '../utils/api';
@@ -220,13 +222,17 @@ export function SellerDashboard({ user, onLogout }: SellerDashboardProps) {
       <div className="max-w-7xl mx-auto p-4 space-y-6">
         {/* Main Navigation Tabs */}
         <Tabs defaultValue="orders" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 mb-6">
+          <TabsList className="grid w-full grid-cols-4 mb-6">
             <TabsTrigger value="orders" className="gap-2">
               <ShoppingBag className="w-4 h-4" />
               Orders
               {pendingOrders.length > 0 && (
                 <Badge className="ml-1 bg-red-600">{pendingOrders.length}</Badge>
               )}
+            </TabsTrigger>
+            <TabsTrigger value="analytics" className="gap-2">
+              <BarChart2 className="w-4 h-4" />
+              Analytics
             </TabsTrigger>
             <TabsTrigger value="menu" className="gap-2">
               <UtensilsCrossed className="w-4 h-4" />
@@ -448,6 +454,11 @@ export function SellerDashboard({ user, onLogout }: SellerDashboardProps) {
                 )}
               </TabsContent>
             </Tabs>
+          </TabsContent>
+
+          {/* ANALYTICS TAB */}
+          <TabsContent value="analytics" className="space-y-6">
+            <SellerAnalytics orders={orders} />
           </TabsContent>
 
           {/* MENU TAB */}
