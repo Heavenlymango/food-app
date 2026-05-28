@@ -4,7 +4,7 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Card } from './ui/card';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
-import { Plus, Clock, Flame, Leaf, CheckCircle2, AlertTriangle, Info } from 'lucide-react';
+import { Plus, Clock, Flame, Leaf, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useState } from 'react';
 import { classifyItem, badgeFor } from '../utils/healthClassification';
 
@@ -54,17 +54,16 @@ export function MenuItemCard({ item, onAddToCart }: MenuItemCardProps) {
               <p className="text-xs text-gray-500 line-clamp-1">{item.description}</p>
               <div className="flex gap-1 mt-1 flex-wrap items-center">
                 <Badge variant="outline" className="text-xs px-1.5 py-0">{item.shop}</Badge>
-                {badge && isWarning && (
+                {badge && isWarning && !item.isHealthy && (
                   <Popover>
                     <PopoverTrigger asChild>
                       <button
                         type="button"
-                        className="inline-flex items-center gap-1 rounded-md bg-orange-100 text-orange-700 border border-orange-300 px-1.5 py-0 text-[10px] font-semibold hover:bg-orange-200 transition-colors"
+                        className="inline-flex items-center gap-0.5 rounded bg-orange-100 text-orange-700 border border-orange-300 px-1 py-0 text-[10px] leading-4 font-medium hover:bg-orange-200 transition-colors"
                         aria-label={`Why this item is ${badge.label.toLowerCase()}`}
                       >
                         <AlertTriangle className="w-2.5 h-2.5" />
                         {badge.label}
-                        <Info className="w-2.5 h-2.5 opacity-70" />
                       </button>
                     </PopoverTrigger>
                     <PopoverContent className="w-80 text-xs" side="top">

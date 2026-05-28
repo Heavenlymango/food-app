@@ -81,9 +81,11 @@ export const SOURCES = {
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 const FRIED_KEYWORDS = ['fried', 'fries', 'deep-fry', 'deep fry', 'tempura', 'nugget', 'chip'];
-const SUGARY_DRINK_KEYWORDS = ['soda', 'cola', 'pepsi', 'coke', 'sprite', 'fanta', 'lemonade', 'milkshake', 'frappe', 'bubble tea', 'boba', 'syrup'];
+const SUGARY_DRINK_KEYWORDS = ['soda', 'cola', 'pepsi', 'coke', 'sprite', 'fanta', 'lemonade', 'milkshake', 'frappe', 'frappuccino', 'bubble tea', 'boba', 'syrup', 'milk tea', 'iced tea', 'thai tea', 'smoothie', 'juice', 'slush', 'mocha', 'latte'];
 const SWEET_KEYWORDS = ['cake', 'donut', 'doughnut', 'cookie', 'candy', 'ice cream', 'icecream', 'pastry', 'chocolate'];
 const ULTRA_PROCESSED_CATEGORIES = ['Snacks', 'Desserts'];
+// Drinks that are NOT sweetened — excluded from the "sweetened drink" caution.
+const UNSWEETENED_DRINK_KEYWORDS = ['water', 'americano', 'espresso', 'black coffee', 'unsweetened', 'green tea', 'plain tea', 'sparkling water', 'soda water'];
 
 function nameContains(name: string, keywords: string[]): boolean {
   const lower = name.toLowerCase();
@@ -128,6 +130,24 @@ const ruleSugaryDrink: RuleFn = (item) => {
     reason: 'Sugar-sweetened beverages typically exceed the FSA red threshold for drinks (>11.25 g sugar / 100 ml) and contribute to free-sugar intake which WHO recommends keeping below 10% of total energy (ideally below 5%).',
     status: 'unhealthy',
     sources: [SOURCES.who, SOURCES.fsa, SOURCES.usda],
+  };
+};
+
+// Catch-all for drinks not already flagged by SUGARY_DRINK_KEYWORDS:
+// in a campus food court most drinks are sweetened, so a non-healthy drink
+// that isn't explicitly an unsweetened option is treated with caution.
+const ruleSweetenedDrinkCategory: RuleFn = (item) => {
+  const isDrink = (item.category ?? '').toLowerCase() === 'drinks';
+  if (!isDrink) return null;
+  if (item.isHealthy) return null;
+  if (nameContains(item.name, UNSWEETENED_DRINK_KEYWORDS)) return null;
+  if (nameContains(item.name, SUGARY_DRINK_KEYWORDS)) return null; // already covered, stronger
+  return {
+    id: 'sweetened-drink',
+    label: 'Likely sweetened',
+    reason: 'Most prepared drinks contain added sugar. WHO recommends keeping free sugars below 10% of daily energy (ideally below 5%); choose an unsweetened option where possible.',
+    status: 'caution',
+    sources: [SOURCES.who, SOURCES.fsa],
   };
 };
 
@@ -183,6 +203,7 @@ const ALL_RULES: RuleFn[] = [
   ruleHighCalorie,
   ruleFried,
   ruleSugaryDrink,
+  ruleSweetenedDrinkCategory,
   ruleSweetDessert,
   ruleUltraProcessedCategory,
   ruleSellerHealthy,

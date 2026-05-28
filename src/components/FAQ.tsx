@@ -39,6 +39,14 @@ const RULES: RuleRow[] = [
     sources: [SOURCES.who, SOURCES.fsa, SOURCES.usda, SOURCES.nutriScore],
   },
   {
+    label: 'Likely sweetened drink',
+    trigger: 'Category = "Drinks", not seller-marked healthy, and not an explicitly unsweetened option (water, americano, green tea…)',
+    status: 'Caution',
+    rationale:
+      'Most prepared drinks on a campus menu carry added sugar even when the name does not say so. WHO recommends free sugars below 10% of energy (ideally below 5%). Flagged as caution rather than unhealthy because some may be lightly sweetened.',
+    sources: [SOURCES.who, SOURCES.fsa],
+  },
+  {
     label: 'Sweet dessert / confectionery',
     trigger: 'Category = "Desserts", or name contains cake, donut, cookie, candy, ice cream, pastry, chocolate',
     status: 'Unhealthy',

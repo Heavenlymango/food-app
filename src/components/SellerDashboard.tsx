@@ -186,6 +186,21 @@ export function SellerDashboard({ user, onLogout }: SellerDashboardProps) {
   const cancelledOrders = orders.filter(o => o.status === 'cancelled');
   const newCancellationsCount = cancelledOrders.filter(o => o.isNewCancellation).length;
 
+  // FAQ takes over the whole screen so nothing bleeds through.
+  if (showFAQ) {
+    return (
+      <div className="min-h-screen bg-white">
+        <div className="sticky top-0 bg-white border-b z-10 px-4 py-3 flex items-center gap-3">
+          <Button variant="ghost" size="sm" onClick={() => setShowFAQ(false)} className="text-gray-700">
+            <XIcon className="w-5 h-5 mr-1" /> Back
+          </Button>
+          <h2 className="font-semibold">FAQ &amp; References</h2>
+        </div>
+        <FAQ />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Message Notification Monitor */}
@@ -232,18 +247,6 @@ export function SellerDashboard({ user, onLogout }: SellerDashboardProps) {
           </div>
         </div>
       </div>
-
-      {showFAQ && (
-        <div className="fixed inset-0 z-[100] bg-white overflow-y-auto">
-          <div className="sticky top-0 bg-white border-b z-10 px-4 py-3 flex items-center justify-between">
-            <h2 className="font-semibold">FAQ &amp; References</h2>
-            <Button variant="ghost" size="sm" onClick={() => setShowFAQ(false)} aria-label="Close FAQ">
-              <XIcon className="w-5 h-5" />
-            </Button>
-          </div>
-          <FAQ />
-        </div>
-      )}
 
       <div className="max-w-7xl mx-auto p-4 space-y-6">
         {/* Main Navigation Tabs */}
@@ -746,11 +749,6 @@ function OrderCard({
                       )}
                     </div>
                     <div className="flex gap-1.5 mt-1">
-                      {item.isSpecial && (
-                        <Badge className="bg-orange-500 text-xs px-1.5 py-0">
-                          -30%
-                        </Badge>
-                      )}
                       {item.isHealthy && (
                         <Badge variant="secondary" className="text-xs px-1.5 py-0">
                           Healthy
@@ -758,15 +756,10 @@ function OrderCard({
                       )}
                     </div>
                   </div>
-                  
+
                   {/* Item Price */}
                   <div className="text-right flex-shrink-0">
                     <p className="text-sm font-medium text-gray-900">${(item.quantity * item.price).toFixed(2)}</p>
-                    {item.isSpecial && (
-                      <p className="text-xs text-gray-400 line-through">
-                        ${((item.price / 0.7) * item.quantity).toFixed(2)}
-                      </p>
-                    )}
                   </div>
                 </div>
               </div>

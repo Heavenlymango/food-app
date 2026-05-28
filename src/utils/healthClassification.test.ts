@@ -60,6 +60,31 @@ describe('classifyItem — unhealthy rules', () => {
     expect(r.status).toBe('unhealthy');
     expect(r.reasons.some(x => x.id === 'fried')).toBe(true);
   });
+
+  it('catches milk tea as a sugary drink (unhealthy)', () => {
+    const r = classifyItem(item({ name: 'Iced Milk Tea', category: 'Drinks', calories: 180 }));
+    expect(r.status).toBe('unhealthy');
+    expect(r.reasons.some(x => x.id === 'sugary-drink')).toBe(true);
+  });
+});
+
+describe('classifyItem — drinks coverage', () => {
+  it('cautions a generic non-healthy drink not caught by keywords', () => {
+    const r = classifyItem(item({ name: 'House Special Cooler', category: 'Drinks', calories: 120 }));
+    expect(r.status).toBe('caution');
+    expect(r.reasons.some(x => x.id === 'sweetened-drink')).toBe(true);
+  });
+
+  it('does NOT flag an explicitly unsweetened drink', () => {
+    const r = classifyItem(item({ name: 'Sparkling Water', category: 'Drinks', calories: 0 }));
+    expect(r.status).toBe('neutral');
+  });
+
+  it('does NOT double-flag: keyword drink stays unhealthy, not caution', () => {
+    const r = classifyItem(item({ name: 'Bubble Tea', category: 'Drinks', calories: 250 }));
+    expect(r.status).toBe('unhealthy');
+    expect(r.reasons.some(x => x.id === 'sweetened-drink')).toBe(false);
+  });
 });
 
 describe('classifyItem — healthy rules', () => {

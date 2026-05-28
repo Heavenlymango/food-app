@@ -355,11 +355,6 @@ export function OrderTracker({ orders, studentId }: OrderTrackerProps) {
                                     )}
                                   </div>
                                   <div className="flex gap-1.5 mt-1">
-                                    {item.isSpecial && (
-                                      <Badge className="bg-orange-500 text-xs px-1.5 py-0">
-                                        -30%
-                                      </Badge>
-                                    )}
                                     {item.isHealthy && (
                                       <Badge variant="secondary" className="text-xs px-1.5 py-0">
                                         Healthy
@@ -367,15 +362,10 @@ export function OrderTracker({ orders, studentId }: OrderTrackerProps) {
                                     )}
                                   </div>
                                 </div>
-                                
+
                                 {/* Item Price */}
                                 <div className="text-right flex-shrink-0">
                                   <p className="text-sm font-medium text-gray-900">${(item.quantity * item.price).toFixed(2)}</p>
-                                  {item.isSpecial && (
-                                    <p className="text-xs text-gray-400 line-through">
-                                      ${((item.price / 0.7) * item.quantity).toFixed(2)}
-                                    </p>
-                                  )}
                                 </div>
                               </div>
                             </div>

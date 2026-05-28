@@ -109,7 +109,7 @@ export function SellerAnalytics({ orders }: SellerAnalyticsProps) {
     }
     // Trim to active hours (6am–10pm) to keep the chart readable
     const peakHours = hourBuckets.slice(6, 22).map(b => ({
-      hour: b.hour === 0 ? '12a' : b.hour < 12 ? `${b.hour}a` : b.hour === 12 ? '12p' : `${b.hour - 12}p`,
+      hour: b.hour === 0 ? '12am' : b.hour < 12 ? `${b.hour}am` : b.hour === 12 ? '12pm' : `${b.hour - 12}pm`,
       orders: b.orders,
     }));
 

@@ -172,21 +172,21 @@ export function NutritionDashboard({ orders }: NutritionDashboardProps) {
 
       {/* Today's calorie hero card */}
       <div
-        className="rounded-2xl p-5 text-white"
-        style={{ background: 'linear-gradient(135deg, #ea580c, #f97316)' }}
+        className="rounded-2xl px-5 py-6 text-white shadow-md"
+        style={{ background: 'linear-gradient(to right, #ea580c, #f97316)' }}
       >
         <p className="text-sm text-orange-100 font-medium mb-1">Today's Calories</p>
         <div className="flex items-end gap-2">
           <span className="text-4xl font-bold leading-none">{data.todayCalories}</span>
-          <span className="text-orange-200 text-sm mb-1">/ {DAILY_GOAL} kcal</span>
+          <span className="text-orange-100 text-sm mb-1">/ {DAILY_GOAL} kcal</span>
         </div>
-        <div className="mt-3 bg-white/20 rounded-full h-2 overflow-hidden">
+        <div className="mt-4 bg-white/25 rounded-full h-2.5 overflow-hidden">
           <div
             className="h-full bg-white rounded-full transition-all duration-500"
-            style={{ width: `${progress * 100}%` }}
+            style={{ width: `${Math.max(progress * 100, 1.5)}%` }}
           />
         </div>
-        <div className="flex items-center justify-between text-xs text-orange-100 mt-1">
+        <div className="flex items-center justify-between text-xs text-orange-100 mt-2">
           <span>{Math.round(progress * 100)}% of daily goal</span>
           <span>{remaining} kcal remaining</span>
         </div>

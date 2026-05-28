@@ -238,6 +238,26 @@ export default function App() {
   if (user.role === 'seller') return <SellerDashboard user={user} onLogout={handleLogout} />;
   if (user.role === 'admin') return <AdminDashboard user={user} onLogout={handleLogout} />;
 
+  // FAQ takes over the whole screen so nothing bleeds through.
+  if (showFAQ) {
+    return (
+      <div className="min-h-screen bg-white">
+        <div className="sticky top-0 bg-white border-b z-10 px-4 py-3 flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowFAQ(false)}
+            className="text-gray-700"
+          >
+            <XIcon className="w-5 h-5 mr-1" /> Back
+          </Button>
+          <h2 className="font-semibold">FAQ &amp; References</h2>
+        </div>
+        <FAQ />
+      </div>
+    );
+  }
+
   const cartItemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
@@ -289,23 +309,6 @@ export default function App() {
 
       {showScan && (
         <FoodScan onAddToCart={addToCart} onClose={() => setShowScan(false)} />
-      )}
-
-      {showFAQ && (
-        <div className="fixed inset-0 z-[100] bg-white overflow-y-auto">
-          <div className="sticky top-0 bg-white border-b z-10 px-4 py-3 flex items-center justify-between">
-            <h2 className="font-semibold">FAQ &amp; References</h2>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowFAQ(false)}
-              aria-label="Close FAQ"
-            >
-              <XIcon className="w-5 h-5" />
-            </Button>
-          </div>
-          <FAQ />
-        </div>
       )}
 
       <main className="px-4 pt-4 pb-24 max-w-lg mx-auto">
