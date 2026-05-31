@@ -44,7 +44,7 @@ export function MenuBrowser({ onAddToCart }: MenuBrowserProps) {
       const [itemsRes, shopsRes, schedulesRes] = await Promise.all([
         supabase
           .from('menu_items')
-          .select('id, name, description, price, category, calories, is_healthy, is_special, image_url, preparation_time, shops!inner(shop_code, name, campus, description, discount_percent)')
+          .select('id, name, description, price, category, calories, is_healthy, is_special, hide_healthy_badge, hide_unhealthy_badge, image_url, preparation_time, shops!inner(shop_code, name, campus, description, discount_percent)')
           .eq('is_available', true),
         supabase
           .from('shops')
@@ -93,6 +93,8 @@ export function MenuBrowser({ onAddToCart }: MenuBrowserProps) {
           calories: item.calories ?? 0,
           isHealthy: item.is_healthy ?? false,
           isSpecial: item.is_special ?? false,
+          hideHealthyBadge: item.hide_healthy_badge ?? false,
+          hideUnhealthyBadge: item.hide_unhealthy_badge ?? false,
           image: item.image_url ?? '',
           preparationTime: item.preparation_time ?? 15,
           shop: shopCode,

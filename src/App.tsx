@@ -32,6 +32,8 @@ export interface MenuItem {
   calories: number;
   isHealthy: boolean;
   isSpecial: boolean;
+  hideHealthyBadge?: boolean;
+  hideUnhealthyBadge?: boolean;
   image: string;
   preparationTime: number;
   shop: string;

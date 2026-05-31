@@ -28,6 +28,8 @@ interface RawItem {
   calories: number | null;
   is_healthy: boolean | null;
   is_special: boolean | null;
+  hide_healthy_badge: boolean | null;
+  hide_unhealthy_badge: boolean | null;
   image_url: string | null;
   preparation_time: number | null;
   is_available: boolean | null;
@@ -56,6 +58,7 @@ const EMPTY_SCHEDULE = {
 const EMPTY_FORM = {
   name: '', description: '', price: '', category: 'Main Course',
   calories: '', preparation_time: '15', is_healthy: false, is_special: false,
+  hide_healthy_badge: false, hide_unhealthy_badge: false,
   is_available: true, image_url: '',
 };
 
@@ -143,6 +146,8 @@ export function MenuManagement({ shopId }: MenuManagementProps) {
       preparation_time: item.preparation_time?.toString() ?? '15',
       is_healthy: item.is_healthy ?? false,
       is_special: item.is_special ?? false,
+      hide_healthy_badge: item.hide_healthy_badge ?? false,
+      hide_unhealthy_badge: item.hide_unhealthy_badge ?? false,
       is_available: item.is_available ?? true,
       image_url: item.image_url ?? '',
     });
@@ -218,6 +223,8 @@ export function MenuManagement({ shopId }: MenuManagementProps) {
       preparation_time: parseInt(form.preparation_time) || 15,
       is_healthy: form.is_healthy,
       is_special: form.is_special,
+      hide_healthy_badge: form.hide_healthy_badge,
+      hide_unhealthy_badge: form.hide_unhealthy_badge,
       is_available: form.is_available,
       image_url: form.image_url.trim() || null,
     };
@@ -320,6 +327,37 @@ export function MenuManagement({ shopId }: MenuManagementProps) {
                 <label className="flex items-center gap-2 cursor-pointer text-sm">
                   <Switch checked={f.is_available} onCheckedChange={v => set('is_available', v)} />
                   Available
+                </label>
+              </div>
+
+              {/* Per-item badge overrides — let the seller suppress an
+                  auto-classified badge they disagree with. */}
+              <div className="border-t pt-3 mt-1 space-y-2">
+                <p className="text-xs font-semibold text-gray-700">Badge overrides</p>
+                <label className="flex items-start gap-2 cursor-pointer text-sm">
+                  <Switch
+                    checked={f.hide_healthy_badge}
+                    onCheckedChange={v => set('hide_healthy_badge', v)}
+                  />
+                  <span>
+                    <span className="font-medium">Hide Healthy badge</span>
+                    <span className="block text-xs text-gray-500">
+                      Suppresses the green leaf even when the item is marked Healthy.
+                    </span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-2 cursor-pointer text-sm">
+                  <Switch
+                    checked={f.hide_unhealthy_badge}
+                    onCheckedChange={v => set('hide_unhealthy_badge', v)}
+                  />
+                  <span>
+                    <span className="font-medium">Hide Unhealthy badge</span>
+                    <span className="block text-xs text-gray-500">
+                      Suppresses the auto-classifier's orange Unhealthy / Heavy meal label
+                      for this item.
+                    </span>
+                  </span>
                 </label>
               </div>
               <DialogFooter>

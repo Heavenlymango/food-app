@@ -54,7 +54,7 @@ export function MenuItemCard({ item, onAddToCart }: MenuItemCardProps) {
               <p className="text-xs text-gray-500 line-clamp-1">{item.description}</p>
               <div className="flex gap-1 mt-1 flex-wrap items-center">
                 <Badge variant="outline" className="text-xs px-1.5 py-0">{item.shop}</Badge>
-                {badge && isWarning && !item.isHealthy && (
+                {badge && isWarning && !item.isHealthy && !item.hideUnhealthyBadge && (
                   <Popover>
                     <PopoverTrigger asChild>
                       <button
@@ -99,7 +99,7 @@ export function MenuItemCard({ item, onAddToCart }: MenuItemCardProps) {
                 )}
               </div>
             </div>
-            {item.isHealthy && <Leaf className="w-4 h-4 text-green-500 flex-shrink-0" />}
+            {item.isHealthy && !item.hideHealthyBadge && <Leaf className="w-4 h-4 text-green-500 flex-shrink-0" />}
           </div>
 
           <div className="flex items-center gap-3 text-xs text-gray-400 mt-1">
