@@ -122,6 +122,8 @@ export default function App() {
         calories: oi.calories ?? 0,
         isHealthy: oi.isHealthy ?? false,
         isSpecial: oi.isSpecial ?? false,
+        hideHealthyBadge: oi.hideHealthyBadge ?? false,
+        hideUnhealthyBadge: oi.hideUnhealthyBadge ?? false,
         image: '',
         preparationTime: 15,
         shop: oi.shop ?? o.shopId ?? '',

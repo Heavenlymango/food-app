@@ -564,7 +564,7 @@ export function FoodScan({ onAddToCart, onClose }: FoodScanProps) {
                                 <Flame style={{ width: 11, height: 11 }} />{item.calories}
                               </span>
                             )}
-                            {item.isHealthy && <Leaf style={{ color: C.green, width: 12, height: 12 }} />}
+                            {item.isHealthy && !item.hideHealthyBadge && <Leaf style={{ color: C.green, width: 12, height: 12 }} />}
                           </div>
                         </div>
                         <Button size="sm" onClick={() => !added && handleAddToCart(item)}

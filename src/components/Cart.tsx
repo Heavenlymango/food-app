@@ -258,7 +258,7 @@ export function Cart({ cart, campus, onUpdateQuantity, onPlaceOrder }: CartProps
                           <div className="flex-1 min-w-0">
                             <h3 className="text-sm line-clamp-1">{item.name}</h3>
                             <div className="flex gap-1.5 mt-1">
-                              {item.isHealthy && (
+                              {item.isHealthy && !item.hideHealthyBadge && (
                                 <Badge variant="secondary" className="text-xs px-1.5 py-0">
                                   Healthy
                                 </Badge>

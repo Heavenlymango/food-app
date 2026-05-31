@@ -54,7 +54,10 @@ export function MenuItemCard({ item, onAddToCart }: MenuItemCardProps) {
               <p className="text-xs text-gray-500 line-clamp-1">{item.description}</p>
               <div className="flex gap-1 mt-1 flex-wrap items-center">
                 <Badge variant="outline" className="text-xs px-1.5 py-0">{item.shop}</Badge>
-                {badge && isWarning && !item.isHealthy && !item.hideUnhealthyBadge && (
+                {/* Chip is hidden when (a) the seller explicitly hides it, or
+                    (b) a green leaf is currently visible (no double-badging).
+                    "Visible leaf" = isHealthy AND not suppressed. */}
+                {badge && isWarning && !item.hideUnhealthyBadge && !(item.isHealthy && !item.hideHealthyBadge) && (
                   <Popover>
                     <PopoverTrigger asChild>
                       <button

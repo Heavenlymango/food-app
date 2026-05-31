@@ -350,12 +350,12 @@ export function OrderTracker({ orders, studentId }: OrderTrackerProps) {
                                     <span className="text-sm font-medium text-gray-900 line-clamp-1">
                                       {item.quantity}× {item.name}
                                     </span>
-                                    {item.isHealthy && (
+                                    {item.isHealthy && !item.hideHealthyBadge && (
                                       <Leaf className="w-3 h-3 text-green-500 flex-shrink-0" />
                                     )}
                                   </div>
                                   <div className="flex gap-1.5 mt-1">
-                                    {item.isHealthy && (
+                                    {item.isHealthy && !item.hideHealthyBadge && (
                                       <Badge variant="secondary" className="text-xs px-1.5 py-0">
                                         Healthy
                                       </Badge>

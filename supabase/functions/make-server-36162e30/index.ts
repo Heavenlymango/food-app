@@ -891,7 +891,7 @@ app.get("/make-server-36162e30/api/seller/orders", async (c) => {
         ordered_at, estimated_ready_time, scheduled_for, cancellation_reason, cancelled_at,
         order_items (
           id, menu_item_id, quantity, unit_price, item_name,
-          menu_items ( description, image_url, category, calories, preparation_time, is_healthy, is_special )
+          menu_items ( description, image_url, category, calories, preparation_time, is_healthy, is_special, hide_healthy_badge, hide_unhealthy_badge )
         )
       `)
       .eq('shop_id', shopUuid)
@@ -935,6 +935,8 @@ app.get("/make-server-36162e30/api/seller/orders", async (c) => {
         preparationTime: oi.menu_items?.preparation_time ?? 15,
         isHealthy: oi.menu_items?.is_healthy ?? false,
         isSpecial: oi.menu_items?.is_special ?? false,
+        hideHealthyBadge: oi.menu_items?.hide_healthy_badge ?? false,
+        hideUnhealthyBadge: oi.menu_items?.hide_unhealthy_badge ?? false,
         shop: shopId,
       })),
       total: o.total_amount,
@@ -1062,7 +1064,7 @@ app.get("/make-server-36162e30/api/student/orders", async (c) => {
         shops ( shop_code ),
         order_items (
           id, menu_item_id, quantity, unit_price, item_name,
-          menu_items ( calories, is_healthy, is_special )
+          menu_items ( calories, is_healthy, is_special, hide_healthy_badge, hide_unhealthy_badge )
         )
       `)
       .eq('student_id', supaUser.id)
@@ -1087,6 +1089,8 @@ app.get("/make-server-36162e30/api/student/orders", async (c) => {
           calories: oi.menu_items?.calories ?? 0,
           isHealthy: oi.menu_items?.is_healthy ?? false,
           isSpecial: oi.menu_items?.is_special ?? false,
+          hideHealthyBadge: oi.menu_items?.hide_healthy_badge ?? false,
+          hideUnhealthyBadge: oi.menu_items?.hide_unhealthy_badge ?? false,
         })),
         total: o.total_amount,
         status: o.status,
