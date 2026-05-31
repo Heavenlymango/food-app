@@ -891,7 +891,7 @@ app.get("/make-server-36162e30/api/seller/orders", async (c) => {
         ordered_at, estimated_ready_time, scheduled_for, cancellation_reason, cancelled_at,
         order_items (
           id, menu_item_id, quantity, unit_price, item_name,
-          menu_items ( description, image_url, category, calories, preparation_time, is_healthy, is_special, hide_healthy_badge, hide_unhealthy_badge )
+          menu_items ( description, image_url, category, calories, preparation_time, is_healthy, is_special )
         )
       `)
       .eq('shop_id', shopUuid)
@@ -1064,7 +1064,7 @@ app.get("/make-server-36162e30/api/student/orders", async (c) => {
         shops ( shop_code ),
         order_items (
           id, menu_item_id, quantity, unit_price, item_name,
-          menu_items ( calories, is_healthy, is_special, hide_healthy_badge, hide_unhealthy_badge )
+          menu_items ( calories, is_healthy, is_special )
         )
       `)
       .eq('student_id', supaUser.id)

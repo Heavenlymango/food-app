@@ -196,28 +196,45 @@ export function FoodScan({ onAddToCart, onClose }: FoodScanProps) {
 
   const findMatchingMenuItems = async (results: ScanResult[]): Promise<MenuItem[]> => {
     if (!results.length) return [];
-    const kws = results.flatMap(r => FOOD_LABEL_KEYWORDS[r.label] ?? [r.label.replace(/_/g, ' ')]);
     const { data } = await supabase.from('menu_items')
       .select('id, name, description, price, category, calories, is_healthy, is_special, image_url, preparation_time, shops!inner(shop_code, discount_percent)')
       .eq('is_available', true);
     if (!data) return [];
-    const matched: MenuItem[] = [];
-    for (const item of data) {
-      const n = (item.name as string).toLowerCase();
-      const d = ((item.description as string) ?? '').toLowerCase();
-      if (!kws.some(kw => n.includes(kw) || d.includes(kw))) continue;
+
+    // Build candidate matches by predicted dish RANK so a low-confidence
+    // candidate can't hijack the panel when the top guess has no menu match.
+    const toMenuItem = (item: any): MenuItem => {
       const sc = (item.shops as any)?.shop_code ?? '';
       const sp = (item.shops as any)?.discount_percent ?? 0;
       const price = item.price as number;
-      matched.push({
+      return {
         id: item.id, name: item.name, description: item.description ?? '',
         price, discountPercent: sp, discountedPrice: sp > 0 ? price * (1 - sp / 100) : price,
         category: item.category ?? '', calories: item.calories ?? 0,
         isHealthy: item.is_healthy ?? false, isSpecial: item.is_special ?? false,
         image: item.image_url ?? '', preparationTime: item.preparation_time ?? 15, shop: sc,
-      });
+      };
+    };
+    const matchedFor = (label: string): MenuItem[] => {
+      const kws = FOOD_LABEL_KEYWORDS[label] ?? [label.replace(/_/g, ' ')];
+      const out: MenuItem[] = [];
+      for (const item of data) {
+        const n = (item.name as string).toLowerCase();
+        const d = ((item.description as string) ?? '').toLowerCase();
+        if (kws.some(kw => n.includes(kw) || d.includes(kw))) out.push(toMenuItem(item));
+      }
+      return out;
+    };
+
+    // Try the top prediction first; only fall back to lower-ranked candidates
+    // when nothing matches the top one.
+    const top = matchedFor(results[0].label);
+    if (top.length > 0) return top.slice(0, 10);
+    for (let i = 1; i < results.length; i++) {
+      const next = matchedFor(results[i].label);
+      if (next.length > 0) return next.slice(0, 10);
     }
-    return matched.slice(0, 10);
+    return [];
   };
 
   const submitReport = async () => {
