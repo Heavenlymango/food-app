@@ -62,11 +62,11 @@ export function MenuItemCard({ item, onAddToCart }: MenuItemCardProps) {
                     <PopoverTrigger asChild>
                       <button
                         type="button"
-                        className="inline-flex items-center gap-0.5 rounded bg-orange-100 text-orange-700 border border-orange-300 px-1 py-0 text-[10px] leading-4 font-medium hover:bg-orange-200 transition-colors"
-                        aria-label={`Why this item is ${badge.label.toLowerCase()}`}
+                        className="inline-flex items-center justify-center text-orange-600 hover:text-orange-700 transition-colors"
+                        aria-label={`Why this item is ${badge.label.toLowerCase()}. Tap for details.`}
+                        title={badge.label}
                       >
-                        <AlertTriangle className="w-2.5 h-2.5" />
-                        {badge.label}
+                        <AlertTriangle className="w-4 h-4 flex-shrink-0" />
                       </button>
                     </PopoverTrigger>
                     <PopoverContent className="w-80 text-xs" side="top">
