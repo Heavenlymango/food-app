@@ -72,6 +72,13 @@ export function OrderTracker({ orders, studentId }: OrderTrackerProps) {
           <ShoppingBag className="w-12 h-12 mx-auto text-gray-300 mb-3" />
           <h2 className="text-lg">No orders yet</h2>
           <p className="text-sm text-gray-500 mt-1">Your orders will appear here</p>
+          {/* Diagnostic: show the auth UID so we can verify it matches the
+              student_id stamped on orders in the DB. Remove after debugging. */}
+          {studentId && (
+            <p className="text-[10px] text-gray-300 mt-3 font-mono break-all">
+              You are signed in as: {studentId}
+            </p>
+          )}
         </CardContent>
       </Card>
     );

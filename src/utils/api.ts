@@ -79,7 +79,17 @@ export const api = {
     // cached, even though the server has fresh data.
     const res = await authFetch(url.toString(), { cache: 'no-store' });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Request failed');
+    if (!res.ok) {
+      console.error(`[api.get ${endpoint}] FAILED`, { status: res.status, body: data });
+      throw new Error(data.error || 'Request failed');
+    }
+    // Brief diagnostic so we can see what shape the server returns.
+    if (endpoint === '/api/student/orders') {
+      console.info(`[api.get ${endpoint}] OK`, {
+        status: res.status,
+        orderCount: Array.isArray((data as any).orders) ? (data as any).orders.length : 'n/a',
+      });
+    }
     return data;
   },
 
