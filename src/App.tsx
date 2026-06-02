@@ -18,7 +18,7 @@ import { Toaster } from './components/ui/sonner';
 import { toast } from 'sonner@2.0.3';
 import { supabase, userFromSession } from './utils/supabase/client';
 import { projectId } from './utils/supabase/info';
-import { api } from './utils/api';
+import { api, AuthExpiredError } from './utils/api';
 import logo from 'figma:asset/4b19b246aa3bf4bb775a1c4bcd3c068341bc26c6.png';
 
 export interface MenuItem {
@@ -105,6 +105,13 @@ export default function App() {
     try {
       data = await api.get('/api/student/orders');
     } catch (err) {
+      if (err instanceof AuthExpiredError) {
+        // Token refresh failed: session is genuinely gone. Tell the user
+        // and sign them out so the 5s poll loop stops hammering 401.
+        toast.error('Session expired. Please sign in again.');
+        handleLogout();
+        return;
+      }
       console.error('Failed to fetch student orders:', err);
       return;
     }
