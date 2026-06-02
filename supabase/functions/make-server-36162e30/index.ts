@@ -833,16 +833,34 @@ app.post("/make-server-36162e30/api/orders/place", async (c) => {
       .single();
     if (orderErr || !order) return c.json({ error: 'Failed to create order', detail: orderErr?.message ?? orderErr }, 500);
 
-    // Insert order items
+    // Insert order items.
+    // Note: the Flutter app may send menu_item_id as a non-UUID local string
+    // (e.g. "A1-1" from the bundled seed data). The Postgres column is a UUID
+    // FK to menu_items.id, so non-UUID values cause the whole insert to fail
+    // silently and the order ends up with no items in the seller dashboard.
+    // We coerce any non-UUID id to null and we surface insert errors loudly
+    // instead of swallowing them.
     if (items?.length) {
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const isUuid = (s: any): s is string => typeof s === 'string' && UUID_RE.test(s);
       const orderItems = items.map((i: any) => ({
         order_id: order.id,
-        menu_item_id: i.menuItemId || null,
+        menu_item_id: isUuid(i.menuItemId) ? i.menuItemId : null,
         item_name: i.name,
         unit_price: i.price,
         quantity: i.quantity,
       }));
-      await supabase.from('order_items').insert(orderItems);
+      const { error: itemsErr } = await supabase
+        .from('order_items')
+        .insert(orderItems);
+      if (itemsErr) {
+        console.error('order_items insert failed', itemsErr);
+        return c.json({
+          error: 'Order created but items failed to save',
+          detail: itemsErr.message ?? String(itemsErr),
+          orderId: order.id,
+        }, 500);
+      }
     }
 
     // Return Flutter-compatible shape

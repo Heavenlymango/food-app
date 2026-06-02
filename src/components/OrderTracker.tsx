@@ -229,7 +229,7 @@ export function OrderTracker({ orders, studentId }: OrderTrackerProps) {
                     </Badge>
                   </div>
                   <p className="text-xs text-gray-500">
-                    Placed at {format(order.timestamp, 'h:mm a')}
+                    Placed on {format(order.timestamp, 'EEE, MMM d')} at {format(order.timestamp, 'h:mm a')}
                   </p>
                 </div>
 
