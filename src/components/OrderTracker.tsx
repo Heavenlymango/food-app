@@ -49,21 +49,14 @@ export function OrderTracker({ orders, studentId }: OrderTrackerProps) {
     return null;
   };
 
-  // Sort orders - late orders first, then by timestamp
-  const sortedOrders = [...orders].sort((a, b) => {
-    const aLate = calculateLateTime(a);
-    const bLate = calculateLateTime(b);
-    
-    // Late orders come first
-    if (aLate && !bLate) return -1;
-    if (bLate && !aLate) return 1;
-    
-    // If both late, most late comes first
-    if (aLate && bLate) return bLate - aLate;
-    
-    // Otherwise sort by timestamp (newest first)
-    return b.timestamp.getTime() - a.timestamp.getTime();
-  });
+  // Sort orders by timestamp (newest first). The "late-first" behaviour
+  // was misleading: any abandoned pending order from weeks ago counts as
+  // "most late" and floats above today's actual fresh orders. Lateness is
+  // still surfaced visually on each card via calculateLateTime() — it just
+  // doesn't drive the sort order anymore.
+  const sortedOrders = [...orders].sort(
+    (a, b) => b.timestamp.getTime() - a.timestamp.getTime(),
+  );
 
   if (orders.length === 0) {
     return (
