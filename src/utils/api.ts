@@ -26,7 +26,14 @@ export const api = {
   async get(endpoint: string, params?: Record<string, string>) {
     const url = new URL(`${API_BASE}${endpoint}`);
     if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.append(k, v));
-    const res = await fetch(url.toString(), { headers: await authHeaders() });
+    // cache: 'no-store' — every poll must hit the Edge Function, never the
+    // browser's HTTP cache. Without this, the student order list (and seller
+    // queue) silently serves the first response forever once it's been
+    // cached, even though the server has fresh data.
+    const res = await fetch(url.toString(), {
+      headers: await authHeaders(),
+      cache: 'no-store',
+    });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Request failed');
     return data;
