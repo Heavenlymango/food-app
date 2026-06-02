@@ -810,34 +810,57 @@ app.post("/make-server-36162e30/api/orders/place", async (c) => {
       .single();
     if (shopErr || !shop) return c.json({ error: 'Shop not found' }, 404);
 
+    // Build insert payload — include scheduled_for if provided (reservation feature)
+    const orderPayload: any = {
+      student_id: supaUser.id,
+      shop_id: shop.id,
+      total_amount: total,
+      service_type: serviceType ?? 'pickup',
+      status: 'pending',
+      estimated_ready_time: estimatedMinutes
+        ? new Date(Date.now() + estimatedMinutes * 60000).toISOString()
+        : null,
+    };
+    if (scheduledFor) {
+      try { orderPayload.scheduled_for = new Date(scheduledFor).toISOString(); } catch (_) {}
+    }
+
     // Insert order
     const { data: order, error: orderErr } = await supabase
       .from('orders')
-      .insert({
-        student_id: supaUser.id,
-        shop_id: shop.id,
-        total_amount: total,
-        service_type: serviceType ?? 'pickup',
-        status: 'pending',
-        estimated_ready_time: estimatedMinutes
-          ? new Date(Date.now() + estimatedMinutes * 60000).toISOString()
-          : null,
-        scheduled_for: scheduledFor ?? null,
-      })
+      .insert(orderPayload)
       .select()
       .single();
-    if (orderErr || !order) return c.json({ error: 'Failed to create order' }, 500);
+    if (orderErr || !order) return c.json({ error: 'Failed to create order', detail: orderErr?.message ?? orderErr }, 500);
 
-    // Insert order items
+    // Insert order items.
+    // Note: the Flutter app may send menu_item_id as a non-UUID local string
+    // (e.g. "A1-1" from the bundled seed data). The Postgres column is a UUID
+    // FK to menu_items.id, so non-UUID values cause the whole insert to fail
+    // silently and the order ends up with no items in the seller dashboard.
+    // We coerce any non-UUID id to null and we surface insert errors loudly
+    // instead of swallowing them.
     if (items?.length) {
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const isUuid = (s: any): s is string => typeof s === 'string' && UUID_RE.test(s);
       const orderItems = items.map((i: any) => ({
         order_id: order.id,
-        menu_item_id: i.menuItemId || null,
+        menu_item_id: isUuid(i.menuItemId) ? i.menuItemId : null,
         item_name: i.name,
         unit_price: i.price,
         quantity: i.quantity,
       }));
-      await supabase.from('order_items').insert(orderItems);
+      const { error: itemsErr } = await supabase
+        .from('order_items')
+        .insert(orderItems);
+      if (itemsErr) {
+        console.error('order_items insert failed', itemsErr);
+        return c.json({
+          error: 'Order created but items failed to save',
+          detail: itemsErr.message ?? String(itemsErr),
+          orderId: order.id,
+        }, 500);
+      }
     }
 
     // Return Flutter-compatible shape
@@ -851,7 +874,6 @@ app.post("/make-server-36162e30/api/orders/place", async (c) => {
         status: 'pending',
         createdAt: order.ordered_at,
         estimatedMinutes: estimatedMinutes ?? 15,
-        scheduledFor: scheduledFor ?? null,
       }
     });
   } catch (error) {
@@ -882,27 +904,19 @@ app.get("/make-server-36162e30/api/seller/orders", async (c) => {
 
     const { data: ordersData, error } = await supabase
       .from('orders')
-      .select('id, student_id, total_amount, status, service_type, ordered_at, estimated_ready_time, scheduled_for, cancellation_reason, cancelled_at')
+      .select(`
+        id, student_id, total_amount, status, service_type,
+        ordered_at, estimated_ready_time, scheduled_for, cancellation_reason, cancelled_at,
+        order_items (
+          id, menu_item_id, quantity, unit_price, item_name,
+          menu_items ( description, image_url, category, calories, preparation_time, is_healthy, is_special )
+        )
+      `)
       .eq('shop_id', shopUuid)
       .order('ordered_at', { ascending: false })
       .limit(100);
 
     if (error) return c.json({ error: 'Failed to fetch orders', detail: error.message }, 500);
-
-    // Fetch order items separately (avoids FK join dependency)
-    const orderIds = (ordersData ?? []).map((o: any) => o.id as string);
-    const { data: allItems } = orderIds.length
-      ? await supabase
-          .from('order_items')
-          .select('order_id, id, menu_item_id, quantity, unit_price, item_name, menu_items(description, image_url, category, calories, preparation_time, is_healthy, is_special)')
-          .in('order_id', orderIds)
-      : { data: [] };
-
-    const itemsByOrder: Record<string, any[]> = {};
-    for (const item of allItems ?? []) {
-      if (!itemsByOrder[item.order_id]) itemsByOrder[item.order_id] = [];
-      itemsByOrder[item.order_id].push(item);
-    }
 
     // Fetch student names via admin auth
     const studentIds = [...new Set((ordersData ?? []).map((o: any) => o.student_id as string))];
@@ -920,13 +934,14 @@ app.get("/make-server-36162e30/api/seller/orders", async (c) => {
       } catch { studentNames[sid] = sid.slice(0, 8).toUpperCase(); }
     }
 
-    const viewedCancelledIds: string[] = await kv.get(`shop-viewed-cancelled:${shopUuid}`) || [];
+    // Get viewed cancelled order IDs for this shop (UI state only)
+    const viewedCancelledIds: string[] = await kv.get(`shop-viewed-cancelled:${shopId}`) || [];
 
     const orders = (ordersData ?? []).map((o: any) => ({
       id: o.id,
       studentId: o.student_id,
       studentName: studentNames[o.student_id] ?? 'Unknown',
-      items: (itemsByOrder[o.id] ?? []).map((oi: any) => ({
+      items: (o.order_items ?? []).map((oi: any) => ({
         id: oi.menu_item_id ?? oi.id,
         name: oi.item_name,
         description: oi.menu_items?.description ?? '',
@@ -938,6 +953,8 @@ app.get("/make-server-36162e30/api/seller/orders", async (c) => {
         preparationTime: oi.menu_items?.preparation_time ?? 15,
         isHealthy: oi.menu_items?.is_healthy ?? false,
         isSpecial: oi.menu_items?.is_special ?? false,
+        hideHealthyBadge: oi.menu_items?.hide_healthy_badge ?? false,
+        hideUnhealthyBadge: oi.menu_items?.hide_unhealthy_badge ?? false,
         shop: shopId,
       })),
       total: o.total_amount,
@@ -957,10 +974,10 @@ app.get("/make-server-36162e30/api/seller/orders", async (c) => {
       today: {
         orders: todayOrders.length,
         revenue: todayOrders
-          .filter((o: any) => o.status !== 'cancelled')
+          .filter((o: any) => o.status === 'completed')
           .reduce((sum: number, o: any) => sum + o.total, 0),
       },
-      pending: orders.filter((o: any) => o.status === 'pending' || o.status === 'preparing').length,
+      pending: orders.filter((o: any) => o.status === 'pending').length,
       completed: todayOrders.filter((o: any) => o.status === 'completed').length,
     };
 
@@ -1042,22 +1059,68 @@ app.post("/make-server-36162e30/api/seller/update-order", async (c) => {
 // Get Student Orders
 app.get("/make-server-36162e30/api/student/orders", async (c) => {
   try {
-    const studentId = await getUserIdFromToken(c) ?? c.req.query('studentId');
-    if (!studentId) return c.json({ error: 'Unauthorized' }, 401);
+    // Authenticate via Supabase JWT (same as /api/orders/place)
+    const authHeader = c.req.header('Authorization') ?? '';
+    const jwt = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if (!jwt) return c.json({ error: 'Unauthorized' }, 401);
 
-    const studentOrdersKey = `student-orders:${studentId}`;
-    const orderIds = await kv.get(studentOrdersKey) || [];
-    
-    const orders = [];
-    for (const orderId of orderIds) {
-      const order = await kv.get(`order:${orderId}`);
-      if (order) {
-        orders.push(order);
-      }
-    }
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    );
 
-    // Sort by creation time (newest first)
-    orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const { data: { user: supaUser }, error: authErr } = await supabase.auth.getUser(jwt);
+    if (authErr || !supaUser) return c.json({ error: 'Unauthorized' }, 401);
+
+    // Service-role query bypasses RLS so order_items always come back
+    const { data: ordersData, error } = await supabase
+      .from('orders')
+      .select(`
+        id, student_id, total_amount, status, service_type,
+        ordered_at, estimated_ready_time, scheduled_for,
+        cancellation_reason, cancelled_at,
+        shops ( shop_code ),
+        order_items (
+          id, menu_item_id, quantity, unit_price, item_name,
+          menu_items ( calories, is_healthy, is_special )
+        )
+      `)
+      .eq('student_id', supaUser.id)
+      .order('ordered_at', { ascending: false })
+      .limit(50);
+
+    if (error) return c.json({ error: 'Failed to fetch orders', detail: error.message }, 500);
+
+    const orders = (ordersData ?? []).map((o: any) => {
+      const shopCode = o.shops?.shop_code ?? '';
+      return {
+        id: o.id,
+        studentId: o.student_id,
+        studentName: '',
+        shopId: shopCode,
+        items: (o.order_items ?? []).map((oi: any) => ({
+          menuItemId: oi.menu_item_id ?? '',
+          name: oi.item_name,
+          price: oi.unit_price,
+          quantity: oi.quantity,
+          shop: shopCode,
+          calories: oi.menu_items?.calories ?? 0,
+          isHealthy: oi.menu_items?.is_healthy ?? false,
+          isSpecial: oi.menu_items?.is_special ?? false,
+          hideHealthyBadge: oi.menu_items?.hide_healthy_badge ?? false,
+          hideUnhealthyBadge: oi.menu_items?.hide_unhealthy_badge ?? false,
+        })),
+        total: o.total_amount,
+        status: o.status,
+        serviceType: o.service_type ?? 'pickup',
+        cancelReason: o.cancellation_reason ?? null,
+        cancelledAt: o.cancelled_at ?? null,
+        createdAt: o.ordered_at,
+        estimatedMinutes: 15,
+        estimatedReadyTime: o.estimated_ready_time ?? null,
+        scheduledFor: o.scheduled_for ?? null,
+      };
+    });
 
     return c.json({ orders });
   } catch (error) {
@@ -1072,16 +1135,30 @@ app.get("/make-server-36162e30/api/student/notifications", async (c) => {
     const studentId = await getUserIdFromToken(c) ?? c.req.query('studentId');
     if (!studentId) return c.json({ error: 'Unauthorized' }, 401);
 
-    const studentNotificationsKey = `student-notifications:${studentId}`;
-    const notificationIds = await kv.get(studentNotificationsKey) || [];
-    
-    const notifications = [];
-    for (const notificationId of notificationIds.slice(0, 20)) { // Get last 20 notifications
-      const notification = await kv.get(`notification:${notificationId}`);
-      if (notification) {
-        notifications.push(notification);
-      }
-    }
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    );
+
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('id, user_id, type, title, message, related_order_id, is_read, created_at')
+      .eq('user_id', studentId)
+      .order('created_at', { ascending: false })
+      .limit(20);
+
+    if (error) return c.json({ notifications: [] });
+
+    const notifications = (data ?? []).map((n: any) => ({
+      id: n.id,
+      studentId: n.user_id,
+      orderId: n.related_order_id ?? '',
+      type: n.type,
+      title: n.title,
+      message: n.message,
+      read: n.is_read,
+      createdAt: n.created_at,
+    }));
 
     return c.json({ notifications });
   } catch (error) {
@@ -1095,20 +1172,18 @@ app.post("/make-server-36162e30/api/student/notifications/read", async (c) => {
   try {
     const { notificationId, studentId } = await c.req.json();
 
-    const notification = await kv.get(`notification:${notificationId}`);
-    
-    if (!notification) {
-      return c.json({ error: 'Notification not found' }, 404);
-    }
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    );
 
-    if (notification.studentId !== studentId) {
-      return c.json({ error: 'Unauthorized' }, 403);
-    }
+    await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('id', notificationId)
+      .eq('user_id', studentId);
 
-    notification.read = true;
-    await kv.set(`notification:${notificationId}`, notification);
-
-    return c.json({ notification });
+    return c.json({ success: true });
   } catch (error) {
     console.error('Mark notification read error:', error);
     return c.json({ error: 'Failed to mark notification as read' }, 500);
@@ -1118,19 +1193,20 @@ app.post("/make-server-36162e30/api/student/notifications/read", async (c) => {
 // Mark All Notifications as Read
 app.post("/make-server-36162e30/api/student/notifications/read-all", async (c) => {
   try {
-    const studentId = await getUserIdFromToken(c);
+    const body = await c.req.json().catch(() => ({}));
+    const studentId = await getUserIdFromToken(c) ?? body.studentId;
     if (!studentId) return c.json({ error: 'Unauthorized' }, 401);
 
-    const studentNotificationsKey = `student-notifications:${studentId}`;
-    const notificationIds = await kv.get(studentNotificationsKey) || [];
-    
-    for (const notificationId of notificationIds) {
-      const notification = await kv.get(`notification:${notificationId}`);
-      if (notification && !notification.read) {
-        notification.read = true;
-        await kv.set(`notification:${notificationId}`, notification);
-      }
-    }
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    );
+
+    await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('user_id', studentId)
+      .eq('is_read', false);
 
     return c.json({ success: true });
   } catch (error) {
@@ -1143,27 +1219,23 @@ app.post("/make-server-36162e30/api/student/notifications/read-all", async (c) =
 app.post("/make-server-36162e30/api/seller/mark-cancelled-viewed", async (c) => {
   try {
     const { shopId } = await c.req.json();
+    if (!shopId) return c.json({ error: 'Shop ID required' }, 400);
 
-    if (!shopId) {
-      return c.json({ error: 'Shop ID required' }, 400);
-    }
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    );
 
-    // Get all order IDs for this shop
-    const orderIds = await kv.get(`shop-orders:${shopId}`) || [];
-    
-    // Get all cancelled orders
-    const cancelledOrderIds = [];
-    for (const orderId of orderIds) {
-      const order = await kv.get(`order:${orderId}`);
-      if (order && order.status === 'cancelled') {
-        cancelledOrderIds.push(orderId);
-      }
-    }
+    // Get all cancelled order IDs for this shop
+    const { data: cancelledOrders } = await supabase
+      .from('orders')
+      .select('id')
+      .eq('shop_id', shopId)
+      .eq('status', 'cancelled');
 
-    // Mark all cancelled orders as viewed
+    const cancelledOrderIds = (cancelledOrders ?? []).map((o: any) => o.id);
     await kv.set(`shop-viewed-cancelled:${shopId}`, cancelledOrderIds);
 
-    console.log(`Marked ${cancelledOrderIds.length} cancelled orders as viewed for shop ${shopId}`);
     return c.json({ success: true, viewedCount: cancelledOrderIds.length });
   } catch (error) {
     console.error('Mark cancelled viewed error:', error);
@@ -1731,28 +1803,7 @@ app.get("/make-server-36162e30/admin/stats", async (c) => {
 app.get("/make-server-36162e30/admin/users", async (c) => {
   try {
     const users = await kv.getByPrefix('user:');
-
-    // Enrich with telegram_verified from Supabase auth metadata
-    try {
-      const supabase = createClient(
-        Deno.env.get('SUPABASE_URL')!,
-        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-      );
-      const { data: { users: authUsers } } = await supabase.auth.admin.listUsers({ perPage: 1000 });
-      const verifiedIds = new Set(
-        authUsers
-          .filter((u: any) => u.user_metadata?.telegram_verified === true)
-          .map((u: any) => u.id)
-      );
-      return c.json(users.map((u: any) => ({
-        ...u,
-        isActive: u.isActive ?? true,
-        telegramVerified: verifiedIds.has(u.id),
-      })));
-    } catch (_) {
-      // If Supabase lookup fails, return users without telegram status
-      return c.json(users.map((u: any) => ({ ...u, isActive: u.isActive ?? true })));
-    }
+    return c.json(users);
   } catch (error) {
     console.error('Get users error:', error);
     return c.json({ error: 'Failed to load users' }, 500);
@@ -1763,7 +1814,7 @@ app.get("/make-server-36162e30/admin/users", async (c) => {
 app.get("/make-server-36162e30/admin/shops", async (c) => {
   try {
     const shops = await kv.getByPrefix('shop:');
-    return c.json(shops.map((s: any) => ({ ...s, isActive: s.isActive ?? true })));
+    return c.json(shops);
   } catch (error) {
     console.error('Get shops error:', error);
     return c.json({ error: 'Failed to load shops' }, 500);
