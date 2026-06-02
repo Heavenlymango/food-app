@@ -1,3 +1,10 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// CANONICAL Edge Function source. Edit THIS file.
+// CI deploys this file directly via `supabase functions deploy` — there is
+// NO automatic copy from any other source path. A legacy near-duplicate at
+// src/supabase/functions/server/index.tsx still exists for historical
+// reasons but is not consulted by the deploy pipeline anymore.
+// ─────────────────────────────────────────────────────────────────────────────
 import { Hono } from "npm:hono";
 import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";

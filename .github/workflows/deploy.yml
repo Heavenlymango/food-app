@@ -56,12 +56,13 @@ jobs:
         with:
           version: latest
 
-      - name: Sync function source
-        run: |
-          mkdir -p supabase/functions/make-server-36162e30
-          cp src/supabase/functions/server/index.tsx   supabase/functions/make-server-36162e30/index.ts
-          cp src/supabase/functions/server/kv_store.tsx supabase/functions/make-server-36162e30/kv_store.ts
-
+      # NOTE: The Edge Function source of truth lives in
+      #   supabase/functions/make-server-36162e30/index.ts
+      # We used to cp from src/supabase/functions/server/index.tsx on every
+      # deploy, but that copied a stale legacy copy over the live edits and
+      # silently regressed the deployed function on every push. Editing
+      # the deployable directly is now the only path; CI no longer rewrites
+      # it before deploy.
       - name: Deploy edge function
         run: |
           supabase functions deploy make-server-36162e30 \
