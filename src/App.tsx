@@ -106,10 +106,16 @@ export default function App() {
       data = await api.get('/api/student/orders');
     } catch (err) {
       if (err instanceof AuthExpiredError) {
-        // Token refresh failed: session is genuinely gone. Tell the user
-        // and sign them out so the 5s poll loop stops hammering 401.
-        toast.error('Session expired. Please sign in again.');
-        handleLogout();
+        // Only force a logout if the SDK confirms the session is genuinely
+        // gone. Otherwise just surface a toast — a transient refresh hiccup
+        // shouldn't boot the user the moment they finished logging in.
+        const { data: { session: liveSession } } = await supabase.auth.getSession();
+        if (!liveSession) {
+          toast.error('Session expired. Please sign in again.');
+          handleLogout();
+        } else {
+          console.warn('Orders fetch returned 401 but session is still active; will retry next poll.');
+        }
         return;
       }
       console.error('Failed to fetch student orders:', err);
