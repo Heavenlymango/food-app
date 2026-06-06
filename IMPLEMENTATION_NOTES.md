@@ -403,3 +403,179 @@ flutter test                       # 17 unit tests
 | `4087de3` *(Flutter repo)* | Flutter parity: unhealthy badge, FAQ, rebuilt dashboards, tests, CI gate |
 
 Pull either repo and check `git log` to see the full diffs.
+
+---
+---
+
+# June 2026 push — production-readiness sprint
+
+A second batch of work done while preparing for the final defense.
+Focus shifted from feature work to bug fixes, reliability hardening, and
+defensive coding. The system now survives the failure modes that bit us
+during integration testing.
+
+## Headline changes
+
+| Theme | What changed |
+| --- | --- |
+| **CI source-of-truth bug** | Removed the `cp src/supabase/functions/server/index.tsx → supabase/functions/make-server-36162e30/index.ts` step in `deploy.yml`. The deployable path is now the only source of truth; future edits go straight to it. |
+| **Browser cache vs polling** | `api.get` now forces `cache: 'no-store'`. Order status changes propagate within one poll cycle instead of being silently served from HTTP cache forever. |
+| **Auth refresh resilience** | New `AuthExpiredError` in `api.ts` + `authFetch` wrapper retries once on 401 with a fresh access token. Conditional logout only when the SDK confirms the session is genuinely gone. |
+| **Edge Function defensiveness** | `/api/orders/place` coerces non-UUID `menu_item_id` to `null` so the Flutter app's bundled seed IDs (`A1-1`, `A1-2`) don't break the FK insert. Errors surfaced as 500 with detail. |
+| **New classifier rule** | Added 8th rule `sweetened-drink` (caution) — catches any Drinks-category item that isn't explicitly unsweetened (water, americano, green tea…). Test count: 21 web + 22 Flutter (unchanged; the new rule was covered by existing drink tests). |
+| **Order list sort** | `OrderTracker` switched from "late orders first" to pure timestamp DESC. Months-overdue pending orders no longer dominate the top of fresh students' lists. |
+| **Per-item seller badge override** | `menu_items` gains `hide_healthy_badge` + `hide_unhealthy_badge` columns. Seller form toggles both; menu card respects them. |
+| **Scan menu match** | Now tries the **top** prediction first; only falls through to lower-ranked candidates if no menu items match. Fixes "Khor Ko detected but Spring Rolls shown". |
+| **Flutter Profile / Tips Scaffold** | Both screens were pushed without a `Scaffold` ancestor, causing `TextField` widgets to throw "No Material widget found" when opened from the drawer. Both now wrap their body in `Scaffold(appBar:…, body:…)`. |
+| **Flutter notification overflow** | Notifications bottom sheet was a fixed `Column`. With >10 alerts it overflowed by hundreds of pixels. Replaced with `DraggableScrollableSheet` + `ListView.separated`. |
+| **Web Unhealthy chip** | Was a text pill with icon. Now icon-only (orange ⚠️) to match the green leaf's visual weight. Same tap target, same popover. |
+| **Order-place flow surfaced errors** | The `order_items` insert was silent on failure (order saved without items). Now wrapped in error check; failures return 500 with the Postgres error string. |
+
+## Files touched (June 2026)
+
+| Repo / file | Change |
+| --- | --- |
+| `food_app/.github/workflows/deploy.yml` | Removed legacy `cp` step. Deployable is now canonical. |
+| `food_app/supabase/functions/make-server-36162e30/index.ts` | UUID validation in `/api/orders/place`; removed `hide_healthy_badge`/`hide_unhealthy_badge` from `/api/student/orders` and `/api/seller/orders` SELECTs (defensive against missing migration). |
+| `food_app/supabase/migrations/20260531_menu_badge_overrides.sql` | New columns on `menu_items`. |
+| `food_app/src/utils/api.ts` | `cache: 'no-store'`, `AuthExpiredError`, `authFetch` wrapper, retry-on-401. |
+| `food_app/src/App.tsx` | Catches `AuthExpiredError` from `fetchStudentOrders`; soft-handles transient 401s; only logs out when SDK confirms the session is gone. |
+| `food_app/src/components/MenuItemCard.tsx` | Unhealthy chip → icon-only. Respect `hideUnhealthyBadge` AND `hideHealthyBadge` interaction (chip hidden when leaf would be visible). |
+| `food_app/src/components/MenuManagement.tsx` | Two new switches: **Hide Healthy badge** / **Hide Unhealthy badge**. Form state + load + save. |
+| `food_app/src/components/MenuBrowser.tsx` | Select + map the two new columns. |
+| `food_app/src/components/OrderTracker.tsx` | Sort by `timestamp` DESC only. Removed "late first" reshuffle. |
+| `food_app/src/utils/healthClassification.ts` | Added `ruleSweetenedDrink` (caution) between sugary-drink and sweet-dessert. Expanded `SUGARY_DRINK_KEYWORDS` to catch milk tea / boba / smoothies. New `UNSWEETENED_DRINK_KEYWORDS` exclusion list. |
+| `food_app/src/components/FAQ.tsx` | Now lists 8 rules including the new sweetened-drink row. |
+| `food_app1_flutter/lib/utils/health_classification.dart` | Dart mirror of the new rule + keyword lists. |
+| `food_app1_flutter/lib/screens/faq/faq_screen.dart` | Mirrors the 8-rule list. |
+| `food_app1_flutter/lib/services/api_service.dart` | Routes student orders through Edge Function. |
+| `food_app1_flutter/lib/services/food_recognition_service.dart` | YOLO output-shape autodetect + hardcoded fallback labels. |
+| `food_app1_flutter/lib/screens/scan/food_scan_screen.dart` | Match top prediction first; fallback only if no menu hit. |
+| `food_app1_flutter/lib/screens/profile/profile_screen.dart` | Wrapped in Scaffold + AppBar. |
+| `food_app1_flutter/lib/screens/tips/tips_screen.dart` | Same Scaffold wrap. |
+| `food_app1_flutter/lib/screens/home/home_screen.dart` | Notifications bottom sheet rewritten as `DraggableScrollableSheet` + `ListView`. |
+| `food_app1_flutter/lib/widgets/menu_item_card.dart` | Respects both hide-badge flags. Unhealthy chip suppression logic now matches web ("hide chip when leaf would be visible"). |
+| `food_app1_flutter/lib/models/menu_item.dart` | `hideHealthyBadge` + `hideUnhealthyBadge` fields. |
+| `food_app1_flutter/lib/screens/seller/seller_dashboard_screen.dart` | Two new switches in the item form for badge overrides. |
+
+## The CI source-of-truth bug (worth its own callout)
+
+This silently broke the deployed `/api/student/orders` for a full
+afternoon and ate hours of debugging. Recording it here so future-you
+recognises the smell instantly:
+
+**Symptom.** Endpoint deployed fine via manual `supabase functions
+deploy`. Worked for ~15 minutes. Next push to `main` → CI ran → endpoint
+silently returned 401 again, even though no one changed the function
+code.
+
+**Cause.** The CI workflow had a `Sync function source` step that
+*overwrote* `supabase/functions/make-server-36162e30/index.ts` with the
+contents of a legacy near-duplicate at
+`src/supabase/functions/server/index.tsx`. The legacy file still had the
+old kv-store-based `/api/student/orders` (read a kv mapping written only
+by the custom-auth login path; never written for Supabase-auth users →
+always 401).
+
+**Fix.** Removed the cp step. Synced both files one last time so they
+match. Comment banner at the top of the deployable file says it's
+canonical.
+
+**Lesson.** If a CI workflow has a "sync" step that copies from a
+non-deployable location to a deployable one, the non-deployable location
+is now load-bearing whether you remember it or not. Always have a single
+source of truth.
+
+## The browser-cache vs polling bug (also worth its own callout)
+
+**Symptom.** Student cancels an order in one tab, refreshes the orders
+tab in another — old status sticks for minutes. Seller queue updates
+fine.
+
+**Cause.** Browser HTTP cache. The Edge Function returns `200 OK` with
+no `Cache-Control` header, so the browser is free to apply heuristic
+caching. A polled GET to the same URL → same cached response served from
+disk, never reaching the server.
+
+**Fix.** `fetch(url, { cache: 'no-store' })` on every poll. One line.
+
+**Lesson.** Polling endpoints **must** opt out of HTTP cache explicitly.
+The default is wrong for our use case.
+
+## Migrations applied this round
+
+```bash
+supabase db push      # picks up the file below
+```
+
+| File | Adds |
+| --- | --- |
+| `supabase/migrations/20260531_menu_badge_overrides.sql` | `menu_items.hide_healthy_badge boolean default false`, `menu_items.hide_unhealthy_badge boolean default false` |
+
+## Defense-deck documentation
+
+New artefact: **`FEATURE_NOTES.md`** in this folder. Single page covering
+the messaging system end-to-end plus 12 other features with consistent
+shape (what / how / tech / why / likely questions). Written specifically
+for narrating the defense slides.
+
+## Commits this push corresponds to (June 2026)
+
+| SHA | Repo | Message |
+| --- | --- | --- |
+| `0c7e2bf` | web | Fix scan: match top prediction first, fall back only if no menu hit (Flutter scan_screen) |
+| `ef4a038` | flutter | Same as above (Flutter scan_screen) |
+| `72d09ab` | flutter | Wrap Profile screen in Scaffold so TextField has Material ancestor |
+| `5dd5eca` | flutter | Wrap Tips & Advice in Scaffold + AppBar so it has a back button |
+| `e04c4fe` | flutter | Fix notification bottom-sheet overflow: DraggableScrollableSheet + ListView |
+| `a25abc5` | web | Force no-store on api.get so polled endpoints never serve stale cache |
+| `9feca31` | web | Auto-refresh on 401 + toast-and-logout when refresh fails |
+| `1b2442f` | web | Soften 401 handling: only force logout when SDK confirms session is gone |
+| `3afbcc7` | web | Debug: log /api/student/orders response + show signed-in UID on empty state |
+| `456b19e` | web | Sync src/supabase/functions/server/ with the deployable function |
+| `059e9a5` | web | CI: deploy edge function from the deployable path, not the legacy source |
+| `cda6311` | web | Sort orders strictly newest-first; don't let abandoned late orders dominate |
+| `6ad5d8b` | web | Add FEATURE_NOTES.md: per-feature defense doc (messaging + 12 others) |
+
+## Manual steps required to land June work
+
+1. **Apply the menu-badge-overrides migration**:
+   ```bash
+   cd food_app
+   supabase db push
+   ```
+2. **Redeploy the Edge Function** (CI now does this on every push to
+   `main`, but for the first time after the workflow change):
+   ```bash
+   supabase functions deploy make-server-36162e30 --no-verify-jwt
+   ```
+3. **Optionally**, clean up the duplicate auth user for student `333333`
+   in Supabase Dashboard → Authentication → Users (`af4df333-…` is the
+   unused one; the `b52c3ef9-…` row owns all the actual orders).
+4. **Optionally**, run this once to clean up months-old `pending` orders
+   nobody ever closed:
+   ```sql
+   UPDATE orders
+   SET status = 'cancelled',
+       cancellation_reason = 'Auto-closed (stale)',
+       cancelled_at = now()
+   WHERE status IN ('pending', 'preparing')
+     AND ordered_at < now() - interval '24 hours';
+   ```
+
+## Production-readiness state after this push
+
+| Surface | State |
+| --- | --- |
+| Web order placement | ✅ Works. Order + items both saved atomically from the client's perspective (sequential inserts, both checked). |
+| Web student order list | ✅ Works. Polling every 5 s, cache bypassed, fresh data within one cycle. |
+| Web seller queue | ✅ Works. 10 s poll, same caching guarantees. |
+| Web auth refresh | ✅ Survives a session that's expired but has a valid refresh token. Falls through to a sign-out flow only if the refresh itself fails. |
+| Flutter order placement | ✅ Works. Bundled menu IDs are coerced to null at the Edge Function (the data column for `menu_item_id` is nullable, so the FK isn't enforced when the value is null). |
+| Flutter scan | ✅ Top-prediction match. Fallback only fires when the top has no menu hit. |
+| Flutter Profile + Tips | ✅ Render correctly when opened from the drawer. |
+| Flutter notifications | ✅ Scrolls past screen height. |
+| CI pipeline | ✅ Single source of truth. Deploys from the file you actually edit. Tests gate the deploy. |
+| Documentation | ✅ This file, plus FEATURE_NOTES.md, plus TECH_STACK.md and ARCHITECTURE.md. |
+
+Pull either repo and check `git log` to see the full diffs.

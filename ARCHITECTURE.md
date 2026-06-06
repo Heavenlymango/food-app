@@ -318,3 +318,80 @@ and the Flutter service use the correct normalisation for each model.
 | SUPABASE_ACCESS_TOKEN | GitHub Actions secret | Used only for edge function deploy |
 | VERCEL_TOKEN | GitHub Actions secret | Optional; only needed if using GH Actions deploy |
 | YOLO_MODEL_B64 | GitHub Actions secret | Base64-encoded TFLite model for CI APK build |
+
+---
+
+## Decision 7 — Single source of truth for the Edge Function (June 2026)
+
+**Chosen:** the deployable file
+`supabase/functions/make-server-36162e30/index.ts` is canonical. CI
+deploys it directly. The legacy near-duplicate at
+`src/supabase/functions/server/index.tsx` is kept on disk for history but
+is not consulted by any pipeline.
+
+**Why not keep both in sync via a CI cp step?**
+
+We originally had a CI workflow step that copied the legacy `.tsx` source
+over the deployable `.ts` file before each deploy. This regressed the
+live function on every push to `main` — a developer would edit the `.ts`
+file, deploy succeed manually, then the next CI run would silently
+overwrite their work with the months-old `.tsx` copy. The endpoint
+returned 401 every time CI ran.
+
+The lesson: **if a CI workflow has a "sync" step that copies from a
+non-deployable location to a deployable one, the non-deployable location
+is now load-bearing whether you remember it or not.** Removing the cp
+step made the deployable file the only path that matters.
+
+The deployable file now has a comment banner at the top calling this out
+so future contributors don't get confused.
+
+---
+
+## Decision 8 — Polled endpoints must opt out of HTTP cache (June 2026)
+
+**Chosen:** every `GET` in `src/utils/api.ts` passes `cache: 'no-store'`
+to `fetch()`. No exceptions.
+
+**Why?**
+
+The Edge Function returns `200 OK` with no `Cache-Control` header. By
+default the browser is free to apply heuristic caching: same URL, same
+cached response served from disk, indefinitely. For polled endpoints
+(`/api/student/orders` every 5 s, `/api/seller/orders` every 10 s), this
+meant order status changes made by the seller never reached the student's
+view until a hard refresh.
+
+`cache: 'no-store'` tells the browser not to consult or update the cache.
+Every poll round-trips. One-line fix, no server-side change needed.
+
+**Lesson:** polling endpoints **must** opt out of HTTP cache explicitly.
+The browser's default is wrong for our use case.
+
+---
+
+## Decision 9 — Auth refresh retry (June 2026)
+
+**Chosen:** on a 401 response, `authFetch` calls
+`supabase.auth.refreshSession()` and retries the request exactly once
+with the new access token. If the retry is also 401 (or the refresh
+itself failed), it throws `AuthExpiredError`.
+
+**Why?**
+
+Supabase access tokens last ~1 hour; refresh tokens last ~30 days. The
+SDK auto-refreshes near expiry, but transient network issues or a tab
+that's been idle a long time can leave a stale token in localStorage.
+Without retry, the first poll after the token expires would 401 forever
+and the polling loop would burn CPU on the same failed request.
+
+**Recovery policy.** When `AuthExpiredError` reaches the React layer,
+`fetchStudentOrders` calls `supabase.auth.getSession()` to ask the SDK
+whether the session is genuinely gone:
+- Session is null → toast "Please sign in again" + logout
+- Session still exists → console warning, no toast, let the next poll
+  retry (the retry will likely succeed because the SDK refreshed during
+  the AuthExpiredError handler)
+
+This avoids the failure mode where a transient hiccup kicks the user out
+of an active session right after they signed in.

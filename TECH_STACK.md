@@ -1,12 +1,15 @@
 # Technology Stack
 
 A single reference for every technology used across the Campus Food Ordering
-system, why it's there, and where it lives. Last updated **2026-05-28**.
+system, why it's there, and where it lives. Last updated **2026-06-04**.
 
-For the *reasoning* behind the big architectural choices (ML runtime, two-stage
-pipeline, Supabase, hosting), see [`ARCHITECTURE.md`](ARCHITECTURE.md).
-For what changed recently, see [`IMPLEMENTATION_NOTES.md`](IMPLEMENTATION_NOTES.md).
-For CI/CD, see [`CI_CD_GUIDE.md`](CI_CD_GUIDE.md).
+Related docs:
+- For the *reasoning* behind the big architectural choices (ML runtime,
+  two-stage pipeline, Supabase, hosting): [`ARCHITECTURE.md`](ARCHITECTURE.md).
+- For what changed recently (May + June 2026 sprints): [`IMPLEMENTATION_NOTES.md`](IMPLEMENTATION_NOTES.md).
+- For CI/CD: [`CI_CD_GUIDE.md`](CI_CD_GUIDE.md).
+- For per-feature defense narration (messaging, reservations, promotions,
+  notifications, health rules, etc.): [`FEATURE_NOTES.md`](FEATURE_NOTES.md).
 
 ---
 
@@ -51,11 +54,15 @@ For CI/CD, see [`CI_CD_GUIDE.md`](CI_CD_GUIDE.md).
 **Scripts:** `npm run dev`, `npm run build`, `npm test`, `npm run test:watch`.
 
 **Notable internal modules**
-- `src/utils/healthClassification.ts` — rule-based healthy/unhealthy engine (cited sources).
+- `src/utils/healthClassification.ts` — rule-based healthy/unhealthy engine
+  (8 rules, cited sources).
 - `src/components/SellerAnalytics.tsx` — KPI cards + revenue/items/peak-hours charts.
 - `src/components/NutritionDashboard.tsx` — student calorie/spend/healthy-split charts.
 - `src/components/FAQ.tsx` — classification rules + references + AI-threshold rationale.
-- `src/utils/api.ts` — thin fetch wrapper that attaches the Supabase JWT.
+- `src/components/OrderTracker.tsx` — order list (sorted strictly by timestamp DESC).
+- `src/utils/api.ts` — fetch wrapper that attaches the Supabase JWT,
+  forces `cache: 'no-store'` on every GET, and auto-refreshes the session
+  exactly once on 401 (throws `AuthExpiredError` if the refresh fails).
 
 ## 2. Mobile app — `food_app1_flutter/`
 
@@ -104,7 +111,18 @@ bypass RLS where needed (e.g. `/api/student/orders`).
 
 **Key tables:** `menu_items`, `orders`, `order_items`, `shops`,
 `item_discount_schedules`, `class_breaks`, `notifications`, `scan_reports`,
-`food_nutrition_reference`.
+`food_nutrition_reference`, `order_status_history`.
+
+**Schema migrations:** SQL files in `supabase/migrations/`, applied via
+`supabase db push`. Each file is timestamped, idempotent
+(`ADD COLUMN IF NOT EXISTS`), and tracked in
+`supabase_migrations.schema_migrations` so they never re-run.
+
+**Recent migrations:**
+- `20260519_telegram_otp.sql` — Telegram OTP table for 2FA
+- `20260523_order_items_rls.sql` — RLS policy on `order_items`
+- `20260531_menu_badge_overrides.sql` — `hide_healthy_badge` +
+  `hide_unhealthy_badge` columns on `menu_items`
 
 ## 4. Machine learning
 
@@ -137,17 +155,29 @@ Guidelines 2020–2025, Harvard Healthy Eating Plate.
 
 | Surface | Tool | Command | Coverage |
 | --- | --- | --- | --- |
-| Web | vitest | `npm test` | 21 tests — health classifier rules, precedence, badges, source sanity |
-| Mobile | flutter_test | `flutter test` | 21 tests — same suite mirrored in Dart |
+| Web | vitest | `npm test` | **21 tests** — health classifier rules, precedence, badges, source sanity |
+| Mobile | flutter_test | `flutter test` | **22 tests** — same 21 mirrored in Dart + 1 widget smoke test |
+
+**Total: 43 unit tests** gating both pipelines. Suite runs in ~2 seconds
+on every push.
 
 ## 7. CI/CD — GitHub Actions
 
 | Repo | Workflow | Trigger | Does |
 | --- | --- | --- | --- |
 | `food-app` (web) | `.github/workflows/deploy.yml` | push/PR to main | `npm ci` → `npm test` → `npm run build` → deploy Edge Functions / Vercel (main only) |
-| `Food-app-apk` (Flutter) | `.github/workflows/ci.yml` | push/PR to main, `v*` tags | `flutter analyze` → `flutter test` → build APK → GitHub Release on tags |
+| `Food-app-apk` (Flutter) | `.github/workflows/ci.yml` | push/PR to main | `flutter analyze` → `flutter test` |
+| `Food-app-apk` (Flutter) | `.github/workflows/build-release.yml` | tag `v*` | build APK → upload to GitHub Release |
 
 Tests **gate** the build in both pipelines (a failing test blocks deploy/APK).
+
+**Single source of truth (June 2026 fix):** the web workflow used to copy
+a legacy `.tsx` server file over the live `.ts` deployable before each
+deploy, silently regressing the function on every push. That step was
+removed; the deployable file at
+`supabase/functions/make-server-36162e30/index.ts` is now the only path
+CI deploys from. See [`CI_CD_GUIDE.md`](CI_CD_GUIDE.md) §1.5 for the
+full story.
 
 ## 8. Hosting / deployment
 
