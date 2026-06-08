@@ -177,7 +177,7 @@ export function NutritionDashboard({ orders }: NutritionDashboardProps) {
           utilities (bg-gradient-to-r → bg-linear-to-r); inline style is
           version-proof. */}
       <div
-        className="w-full box-border rounded-2xl overflow-hidden px-5 py-6 text-white shadow-md"
+        className="w-full box-border rounded-3xl overflow-hidden px-5 py-6 text-white shadow-md"
         style={{ background: 'linear-gradient(to right, #ea580c, #f97316)' }}
       >
         <p className="text-sm text-orange-100 font-medium mb-1">Today's Calories</p>
@@ -185,10 +185,10 @@ export function NutritionDashboard({ orders }: NutritionDashboardProps) {
           <span className="text-4xl font-bold leading-none">{data.todayCalories}</span>
           <span className="text-orange-100 text-sm mb-1">/ {DAILY_GOAL} kcal</span>
         </div>
-        <div className="mt-4 bg-white/25 rounded-full h-2.5 overflow-hidden">
-          {/* No min-width: at 0 kcal the bar is genuinely empty, which
-              looks intentional. A 1.5% min produced a stray-dot artefact
-              that read as "cut off". */}
+        {/* Track is bg-white/40 + h-3 so the empty pill is clearly
+            visible at 0 kcal — without it the middle of the card looks
+            empty / "broken". rounded-full guarantees pill ends. */}
+        <div className="mt-4 bg-white/40 rounded-full h-3 overflow-hidden">
           <div
             className="h-full bg-white rounded-full transition-all duration-500"
             style={{ width: `${progress * 100}%` }}
