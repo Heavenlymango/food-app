@@ -181,9 +181,12 @@ export function NutritionDashboard({ orders }: NutritionDashboardProps) {
           <span className="text-orange-100 text-sm mb-1">/ {DAILY_GOAL} kcal</span>
         </div>
         <div className="mt-4 bg-white/25 rounded-full h-2.5 overflow-hidden">
+          {/* No min-width: at 0 kcal the bar is genuinely empty, which
+              looks intentional. A 1.5% min produced a stray-dot artefact
+              that read as "cut off". */}
           <div
             className="h-full bg-white rounded-full transition-all duration-500"
-            style={{ width: `${Math.max(progress * 100, 1.5)}%` }}
+            style={{ width: `${progress * 100}%` }}
           />
         </div>
         <div className="flex items-center justify-between text-xs text-orange-100 mt-2">
