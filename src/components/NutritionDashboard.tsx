@@ -170,11 +170,12 @@ export function NutritionDashboard({ orders }: NutritionDashboardProps) {
         <span className="text-xs text-gray-500">{dateStr}</span>
       </div>
 
-      {/* Today's calorie hero card */}
-      <div
-        className="rounded-2xl px-5 py-6 text-white shadow-md"
-        style={{ background: 'linear-gradient(to right, #ea580c, #f97316)' }}
-      >
+      {/* Today's calorie hero card.
+          overflow-hidden guarantees the gradient + progress bar respect
+          rounded-2xl on all four corners. w-full + box-border ensures we
+          don't overflow the parent on narrow viewports, which previously
+          made the right edge look sharp/clipped. */}
+      <div className="w-full box-border rounded-2xl overflow-hidden px-5 py-6 text-white shadow-md bg-gradient-to-r from-orange-600 to-orange-500">
         <p className="text-sm text-orange-100 font-medium mb-1">Today's Calories</p>
         <div className="flex items-end gap-2">
           <span className="text-4xl font-bold leading-none">{data.todayCalories}</span>
